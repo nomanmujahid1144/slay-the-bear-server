@@ -28,6 +28,20 @@ export const signUpSchema = z.object({
   }),
 });
 
+// Validation schema for profile update
+export const updateProfileSchema = z.object({
+  body: z.object({
+    firstName: z
+      .string()
+      .min(2, 'First name must be at least 2 characters')
+      .max(50, 'First name must be no more than 50 characters'),
+    lastName: z
+      .string()
+      .min(2, 'Last name must be at least 2 characters')
+      .max(50, 'Last name must be no more than 50 characters'),
+  }),
+});
+
 // Login Schema
 export const loginSchema = z.object({
   body: z.object({
@@ -76,8 +90,11 @@ export const refreshTokenSchema = z.object({
   }),
 });
 
+
+
 // Types inferred from schemas
 export type SignUpInput = z.infer<typeof signUpSchema>['body'];
+export type UpdateProfileSchemaInput = z.infer<typeof updateProfileSchema>['body'];
 export type LoginInput = z.infer<typeof loginSchema>['body'];
 export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>['body'];
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>['body'];
