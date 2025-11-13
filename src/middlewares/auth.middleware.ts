@@ -57,7 +57,7 @@ export const requirePremium = async (
     if (!req.user) {
       throw ApiError.unauthorized('Authentication required');
     }
-
+    
     if (req.user.plan !== Plan.PREMIUM) {
       throw ApiError.forbidden('Premium subscription required');
     }

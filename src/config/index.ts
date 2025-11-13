@@ -29,6 +29,9 @@ interface Config {
     STRIPE_MONTHLY_PRICE_ID: string,
     STRIPE_YEARLY_PRICE_ID: string,
 
+    // Alpha Vantage
+    ALPHA_VANTAGE_API_KEY: string,
+
     // Frontend
     FRONTEND_URL: string;
 
@@ -61,6 +64,8 @@ const config: Config = {
     STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET || '',
     STRIPE_MONTHLY_PRICE_ID: process.env.STRIPE_MONTHLY_PRICE_ID || '',
     STRIPE_YEARLY_PRICE_ID: process.env.STRIPE_YEARLY_PRICE_ID || '',
+
+    ALPHA_VANTAGE_API_KEY: process.env.ALPHA_VANTAGE_API_KEY || '',
 
     // Frontend
     FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:3000',
