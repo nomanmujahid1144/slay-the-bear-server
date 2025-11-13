@@ -1,43 +1,52 @@
-import express from 'express';
-import type { Request, Response } from 'express';
+import app from './app';
 import config from './config';
 import { connectDatabase } from './db';
 import { logger } from './utils/logger';
 
-const app = express();
-
-// Middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-// Log all requests
-app.use((req: Request, res: Response, next) => {
-  logger.request(req.method, req.path, req.ip || 'unknown');
-  next();
-});
-
-// Test route
-app.get('/', (req: Request, res: Response) => {
-  res.json({
-    success: true,
-    message: '🐻 Slay The Bear API',
-    version: '1.0.0',
-  });
-});
-
-// Start server
+/**
+ * Start Server
+ */
 async function startServer() {
   try {
+    // Connect to database
     await connectDatabase();
-    
+
+    // Start Express server
     app.listen(config.PORT, () => {
-      logger.info(`Server started on port ${config.PORT}`);
-      logger.info(`Environment: ${config.NODE_ENV}`);
+      logger.info(`🚀 Server started successfully!`);
+      logger.info(`📡 Port: ${config.PORT}`);
+      logger.info(`🌍 Environment: ${config.NODE_ENV}`);
+      logger.info(`🐻 Slay The Bear API is running`);
+      logger.info(`📝 API Docs: http://localhost:${config.PORT}/api/health`);
     });
   } catch (error) {
-    logger.error('Failed to start server', error);
+    logger.error('Failed to start server:', error);
     process.exit(1);
   }
 }
 
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason: any) => {
+  logger.error('Unhandled Rejection:', reason);
+  process.exit(1);
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error: Error) => {
+  logger.error('Uncaught Exception:', error);
+  process.exit(1);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  logger.info('SIGTERM received, shutting down gracefully...');
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  logger.info('SIGINT received, shutting down gracefully...');
+  process.exit(0);
+});
+
+// Start the server
 startServer();
