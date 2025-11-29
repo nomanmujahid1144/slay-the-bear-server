@@ -303,6 +303,8 @@ export class CalculatorService {
         `https://www.alphavantage.co/query?function=CURRENCY_EXCHANGE_RATE&from_currency=${fromCurrency}&to_currency=${toCurrency}&apikey=${config.ALPHA_VANTAGE_API_KEY}`
       );
 
+      console.log(response)
+
       // Check for API error
       if (response.data['Error Message']) {
         throw new Error('Error fetching exchange rates from API');
@@ -333,6 +335,7 @@ export class CalculatorService {
         message: `${amount} ${fromCurrency} = ${convertedAmount.toFixed(2)} ${toCurrency}`,
       };
     } catch (error) {
+      console.log(error, 'error')
       if (axios.isAxiosError(error)) {
         throw new Error('Failed to fetch exchange rates. Please try again later.');
       }

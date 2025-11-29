@@ -2,6 +2,7 @@ import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import cookieParser from 'cookie-parser';
 import config from './config';
 import routes from './routes';
 import { errorHandler, notFoundHandler } from './middlewares/error.middleware';
@@ -36,6 +37,7 @@ app.post(
 
 
 // Body Parser Middleware
+app.use(cookieParser());
 app.use(express.json()); // Parse JSON bodies
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
 

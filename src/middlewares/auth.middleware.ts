@@ -14,14 +14,18 @@ export const authenticate = async (
   next: NextFunction
 ) => {
   try {
-    // Get token from Authorization header
-    const authHeader = req.headers.authorization;
+    let token: string | undefined;
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      throw ApiError.unauthorized('No token provided');
+    // Priority 1: Authorization header (mobile)
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7);
     }
 
-    const token = authHeader.split(' ')[1];
+    // Priority 2: Cookie (web)
+    if (!token) {
+      token = req.cookies?.accessToken;
+    }
 
     if (!token) {
       throw ApiError.unauthorized('No token provided');
@@ -57,7 +61,7 @@ export const requirePremium = async (
     if (!req.user) {
       throw ApiError.unauthorized('Authentication required');
     }
-    
+
     if (req.user.plan !== Plan.PREMIUM) {
       throw ApiError.forbidden('Premium subscription required');
     }
