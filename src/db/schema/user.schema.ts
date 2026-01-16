@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, boolean, timestamp, text, pgEnum } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, boolean, timestamp, text, pgEnum, integer, jsonb } from 'drizzle-orm/pg-core';
 
 // Create Plan enum in database
 export const planEnum = pgEnum('plan', ['free', 'premium']);
@@ -11,6 +11,10 @@ export const users = pgTable('users', {
   lastName: varchar('last_name', { length: 100 }).notNull(),
   email: varchar('email', { length: 255 }).notNull().unique(),
   password: varchar('password', { length: 255 }).notNull(),
+  phone: varchar('phone', { length: 20 }),
+  // location: varchar('location', { length: 255 }),
+  location: jsonb('location'),
+  picture: text('picture'), // URL to profile picture
   
   // Verification fields
   isVerified: boolean('is_verified').default(false).notNull(),
@@ -24,6 +28,11 @@ export const users = pgTable('users', {
   // Subscription fields
   plan: planEnum('plan').default('free').notNull(),
   customerId: varchar('customer_id', { length: 255 }), // Stripe customer ID
+
+  // Referral System fields
+  referralCode: varchar('referral_code', { length: 20 }).unique(), 
+  referredBy: uuid('referred_by'),
+  referralCount: integer('referral_count').default(0).notNull(),
   
   // Timestamps
   createdAt: timestamp('created_at').defaultNow().notNull(),

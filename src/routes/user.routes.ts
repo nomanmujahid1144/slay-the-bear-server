@@ -2,7 +2,8 @@ import { Router } from 'express';
 import { UserController } from '../controllers/user.controller';
 import { authenticate } from '../middlewares/auth.middleware';
 import { validate } from '../middlewares/validate.middleware';
-import { updateProfileSchema } from '../validators/auth.validator';
+import { updateProfileSchema, validateReferralCodeSchema } from '../validators/auth.validator';
+import { upload } from '../middlewares/upload.middleware';
 
 const router = Router();
 
@@ -19,6 +20,11 @@ router.get('/profile', authenticate, UserController.getProfile);
  * @access  Private (requires authentication)
  */
 router.put('/profile', authenticate, validate(updateProfileSchema), UserController.updateProfile);
+
+router.put('/profile-picture', authenticate, upload.single('picture'), UserController.updateProfilePicture);
+router.post('/generate-ref-code', authenticate, UserController.generateReferralCode);
+router.get('/referrals', authenticate, UserController.getReferralStats);
+router.post('/validate-referral-code', validate(validateReferralCodeSchema), UserController.validateReferralCode);
 
 /**
  * @route   GET /api/users/subscription

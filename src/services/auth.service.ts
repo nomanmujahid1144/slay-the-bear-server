@@ -8,17 +8,24 @@ import { logger } from '../utils/logger';
 import { EmailService } from './email.service';
 import { Plan } from '../constants/enums';
 import type { AuthResponse } from '../types';
+import { ReferralCodeUtil } from '../utils/referralCode';
+import { ReferralService } from './referral.service';
 
 export class AuthService {
   /**
    * User Signup - Register new user
    * Converts: /api/users/signup
    */
-  static async signup(firstName: string, lastName: string, email: string, password: string): Promise<{ message: string; user?: any }> {
+  static async signup(
+    firstName: string,
+    lastName: string,
+    email: string,
+    password: string,
+    referralCode?: string
+  ): Promise<{ message: string; user?: any }> {
     try {
       logger.info(`Signup attempt for email: ${email}`);
 
-      // Check if user already exists
       const existingUser = await db
         .select()
         .from(users)
@@ -28,12 +35,10 @@ export class AuthService {
       if (existingUser.length > 0) {
         const user = existingUser[0];
 
-        // If user is already verified, don't allow signup again
         if (user.isVerified) {
           throw ApiError.badRequest('An account with this email address already exists.');
         }
 
-        // User exists but not verified - update password and resend verification
         logger.info(`User exists but not verified, updating password: ${email}`);
 
         const hashedPassword = await PasswordUtil.hash(password);
@@ -47,7 +52,6 @@ export class AuthService {
           })
           .where(eq(users.id, user.id));
 
-        // Send verification email
         await EmailService.sendVerificationEmail(email, user.id, firstName);
 
         logger.info(`Signup retry successful for: ${email}`);
@@ -57,8 +61,18 @@ export class AuthService {
         };
       }
 
-      // Create new user
+      // Validate referral code if provided
+      if (referralCode) {
+        const validation = await ReferralCodeUtil.validateCode(referralCode);
+        console.log(validation, 'validation')
+        if (!validation.valid) {
+          throw ApiError.badRequest('Invalid referral code');
+        }
+      }
+
+      // Create new user with auto-generated referral code
       const hashedPassword = await PasswordUtil.hash(password);
+      const newUserReferralCode = await ReferralCodeUtil.generatePersonalizedCode(firstName);
 
       const [newUser] = await db
         .insert(users)
@@ -67,10 +81,22 @@ export class AuthService {
           lastName,
           email,
           password: hashedPassword,
+          referralCode: newUserReferralCode,
         })
         .returning();
 
-      // Send verification email
+        console.log(newUser, 'newUser')
+
+      // Apply referral code if provided
+      if (referralCode) {
+        try {
+          await ReferralService.applyReferralCode(newUser.id, referralCode);
+          logger.info(`Referral code applied for new user: ${newUser.id}`);
+        } catch (error: any) {
+          logger.warn(`Failed to apply referral code: ${error.message}`);
+        }
+      }
+
       await EmailService.sendVerificationEmail(email, newUser.id, firstName);
 
       logger.info(`User registered successfully: ${email}`);
@@ -92,7 +118,6 @@ export class AuthService {
     try {
       logger.info(`Login attempt for email: ${email}`);
 
-      // Find user by email
       const existingUser = await db
         .select()
         .from(users)
@@ -105,35 +130,31 @@ export class AuthService {
 
       const user = existingUser[0];
 
-      // Check password
       const validPassword = await PasswordUtil.compare(password, user.password);
 
       if (!validPassword) {
         throw ApiError.badRequest('Wrong email or password. Try again.');
       }
 
-      // Check if user is verified
       if (!user.isVerified) {
         logger.warn(`Login failed - user not verified: ${email}`);
         throw ApiError.badRequest('Please verify first, or signup again');
       }
 
-      // Generate JWT tokens
       const tokens = JWTUtil.generateTokenPair({
         id: user.id,
         email: user.email,
         plan: user.plan as Plan,
       });
 
-      // Remove password and sensitive fields from response
-      const { 
-        password: _, 
-        verifyToken, 
-        verifyTokenExpiry, 
-        forgotPasswordToken, 
+      const {
+        password: _,
+        verifyToken,
+        verifyTokenExpiry,
+        forgotPasswordToken,
         forgotPasswordTokenExpiry,
         customerId,
-        ...userWithoutPassword 
+        ...userWithoutPassword
       } = user;
 
       logger.info(`User logged in successfully: ${email}`);
@@ -141,7 +162,7 @@ export class AuthService {
       return {
         user: {
           ...userWithoutPassword,
-          plan: user.plan as Plan, // Cast to enum type
+          plan: user.plan as Plan,
         },
         tokens,
       };
@@ -159,7 +180,6 @@ export class AuthService {
     try {
       logger.info('Email verification attempt');
 
-      // Find user with valid token
       const existingUser = await db
         .select()
         .from(users)
@@ -177,7 +197,6 @@ export class AuthService {
 
       const user = existingUser[0];
 
-      // Mark user as verified and clear token
       await db
         .update(users)
         .set({
@@ -186,6 +205,9 @@ export class AuthService {
           verifyTokenExpiry: null,
         })
         .where(eq(users.id, user.id));
+
+      // Complete referral
+      await ReferralService.completeReferral(user.id);
 
       logger.info(`Email verified successfully: ${user.email}`);
 
@@ -197,6 +219,7 @@ export class AuthService {
       throw error instanceof ApiError ? error : ApiError.internal(error.message);
     }
   }
+
 
   /**
    * Forgot Password - Send reset email

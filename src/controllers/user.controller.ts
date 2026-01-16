@@ -3,6 +3,8 @@ import { UserService } from '../services/user.service';
 import { ApiResponseUtil } from '../utils/ApiResponse';
 import { logger } from '../utils/logger';
 import type { AuthRequest } from '../types';
+import { deleteFromSupabase, uploadToSupabase } from '../utils/fileUpload';
+import { ReferralService } from '../services/referral.service';
 
 /**
  * User Controller - Handles HTTP requests for user operations
@@ -42,7 +44,8 @@ export class UserController {
   static async updateProfile(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const userId = req.user?.id;
-      const { firstName, lastName } = req.body;
+      const { firstName, lastName, phone, location } = req.body;
+      console.log(req.body)
 
       if (!userId) {
         throw new Error('User ID not found in request');
@@ -50,7 +53,7 @@ export class UserController {
 
       logger.info(`Profile update request for user: ${userId}`);
 
-      const result = await UserService.updateUserProfile(userId, firstName, lastName);
+      const result = await UserService.updateUserProfile(userId, firstName, lastName, phone, location);
 
       return ApiResponseUtil.success(
         res,
@@ -58,6 +61,80 @@ export class UserController {
         result.message,
         200
       );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async updateProfilePicture(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) throw new Error('User not authenticated');
+
+      const file = req.file;
+      if (!file) {
+        return ApiResponseUtil.error(res, 'No file uploaded', 400);
+      }
+
+      // Get current user
+      const currentUser = await UserService.getUserById(userId);
+      const oldPictureUrl = currentUser.picture;
+
+      // Upload new picture
+      const pictureUrl = await uploadToSupabase(file, userId);
+
+      // Save URL to database
+      const result = await UserService.updateProfilePicture(userId, pictureUrl);
+
+      // Delete old picture
+      if (oldPictureUrl) {
+        await deleteFromSupabase(oldPictureUrl, userId);
+      }
+
+      return ApiResponseUtil.success(res, { picture: result.picture }, result.message);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async generateReferralCode(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) throw new Error('User not authenticated');
+
+      const result = await ReferralService.generateReferralCode(userId);
+      return ApiResponseUtil.success(res, result, 'Referral code generated successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async getReferralStats(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) throw new Error('User not authenticated');
+
+      const stats = await ReferralService.getReferralStats(userId);
+      return ApiResponseUtil.success(res, stats, 'Referral stats retrieved successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async validateReferralCode(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { code } = req.body;
+      if (!code) {
+        return ApiResponseUtil.error(res, 'Referral code is required', 400);
+      }
+
+      const result = await ReferralService.validateReferralCode(code);
+
+      if (result.valid) {
+        return ApiResponseUtil.success(res, result, result.message);
+      } else {
+        return ApiResponseUtil.error(res, result.message, 400);
+      }
     } catch (error) {
       next(error);
     }

@@ -5,6 +5,7 @@ import { ApiError } from '../utils/ApiError';
 import { logger } from '../utils/logger';
 import { Plan } from '../constants/enums';
 import type { UserResponse } from '../types';
+import type { Location } from '../types/user/location.types';
 
 export class UserService {
   /**
@@ -21,8 +22,13 @@ export class UserService {
           firstName: users.firstName,
           lastName: users.lastName,
           email: users.email,
+          phone: users.phone,
+          location: users.location,
+          picture: users.picture,
           isVerified: users.isVerified,
           plan: users.plan,
+          referralCode: users.referralCode,
+          referralCount: users.referralCount,
           createdAt: users.createdAt,
           updatedAt: users.updatedAt,
         })
@@ -54,13 +60,14 @@ export class UserService {
    */
   static async updateUserProfile(
     userId: string,
-    firstName: string,
-    lastName: string
+    firstName?: string,
+    lastName?: string,
+    phone?: string,
+    location?: Location
   ): Promise<{ message: string }> {
     try {
       logger.info(`Updating profile for user: ${userId}`);
 
-      // Check if user exists
       const existingUser = await db
         .select()
         .from(users)
@@ -71,23 +78,61 @@ export class UserService {
         throw ApiError.notFound('User not found');
       }
 
-      // Update user
+      const updateData: any = { updatedAt: new Date() };
+      if (firstName !== undefined) updateData.firstName = firstName;
+      if (lastName !== undefined) updateData.lastName = lastName;
+      if (phone !== undefined) updateData.phone = phone;
+      if (location !== undefined) updateData.location = location;
+
       await db
         .update(users)
-        .set({
-          firstName,
-          lastName,
-          updatedAt: new Date(),
-        })
+        .set(updateData)
         .where(eq(users.id, userId));
 
       logger.info(`Profile updated for user: ${userId}`);
 
       return {
-        message: 'Your details updated successfully',
+        message: 'Profile updated successfully',
       };
     } catch (error: any) {
       logger.error('Update profile error', { error: error.message, userId });
+      throw error instanceof ApiError ? error : ApiError.internal(error.message);
+    }
+  }
+
+  static async updateProfilePicture(
+    userId: string,
+    pictureUrl: string
+  ): Promise<{ message: string; picture: string }> {
+    try {
+      logger.info(`Updating profile picture for user: ${userId}`);
+
+      const existingUser = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+
+      if (existingUser.length === 0) {
+        throw ApiError.notFound('User not found');
+      }
+
+      await db
+        .update(users)
+        .set({
+          picture: pictureUrl,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, userId));
+
+      logger.info(`Profile picture updated for user: ${userId}`);
+
+      return {
+        message: 'Profile picture updated successfully',
+        picture: pictureUrl,
+      };
+    } catch (error: any) {
+      logger.error('Update profile picture error', { error: error.message, userId });
       throw error instanceof ApiError ? error : ApiError.internal(error.message);
     }
   }

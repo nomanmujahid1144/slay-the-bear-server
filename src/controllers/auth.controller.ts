@@ -16,11 +16,11 @@ export class AuthController {
    */
   static async signup(req: Request, res: Response, next: NextFunction) {
     try {
-      const { firstName, lastName, email, password } = req.body;
+      const { firstName, lastName, email, password, referralCode } = req.body;
 
       logger.info(`Signup request received for: ${email}`);
 
-      const result = await AuthService.signup(firstName, lastName, email, password);
+      const result = await AuthService.signup(firstName, lastName, email, password, referralCode);
 
       return ApiResponseUtil.success(
         res,

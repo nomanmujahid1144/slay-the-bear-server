@@ -28,18 +28,31 @@ export const signUpSchema = z.object({
   }),
 });
 
+
+const locationSchema = z.object({
+  address: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  country: z.string().optional(),
+  zipCode: z.string().optional(),
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
+}).optional();
+
 // Validation schema for profile update
 export const updateProfileSchema = z.object({
   body: z.object({
     firstName: z
       .string()
       .min(2, 'First name must be at least 2 characters')
-      .max(50, 'First name must be no more than 50 characters'),
+      .max(50, 'First name must be no more than 50 characters').optional(),
     lastName: z
       .string()
       .min(2, 'Last name must be at least 2 characters')
-      .max(50, 'Last name must be no more than 50 characters'),
+      .max(50, 'Last name must be no more than 50 characters').optional(),
   }),
+  phone: z.string().regex(/^[+]?[(]?[0-9]{1,4}[)]?[-\s.]?[(]?[0-9]{1,4}[)]?[-\s.]?[0-9]{1,9}$/).optional().or(z.literal('')),
+  location: locationSchema,
 });
 
 // Login Schema
@@ -90,6 +103,13 @@ export const refreshTokenSchema = z.object({
   }),
 });
 
+
+// Refferal Code
+export const validateReferralCodeSchema = z.object({
+  body: z.object({
+    code: z.string().min(6).max(12).regex(/^[A-Z0-9]+$/),
+  }),
+});
 
 
 // Types inferred from schemas

@@ -12,6 +12,10 @@ interface Config {
     // Database
     DATABASE_URL: string;
 
+    // Supabase
+    SUPABASE_URL: string,
+    SUPABASE_SERVICE_KEY: string,
+
     // JWT
     JWT_ACCESS_SECRET: string;
     JWT_REFRESH_SECRET: string;
@@ -32,6 +36,7 @@ interface Config {
     // Alpha Vantage
     ALPHA_VANTAGE_API_KEY: string,
 
+
     // Frontend
     FRONTEND_URL: string;
 
@@ -46,6 +51,10 @@ const config: Config = {
 
     // Database
     DATABASE_URL: process.env.DATABASE_URL || '',
+
+    // Supabase
+    SUPABASE_URL: process.env.SUPABASE_URL || '',
+    SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_KEY || '',
 
     // JWT
     JWT_ACCESS_SECRET: process.env.JWT_ACCESS_SECRET || '',
