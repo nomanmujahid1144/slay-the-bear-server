@@ -1,8 +1,12 @@
-import { Request, Response } from 'express';
+import { NextFunction, Request, Response } from 'express';
 import { CalculatorService } from '../services/calculator.service';
 import { bondPriceCalculatorSchema, bondYTMCalculatorSchema, breakEvenCalculatorSchema, budgetCalculatorSchema, cdCalculatorSchema, compoundInterestCalculatorSchema, creditPayoffCalculatorSchema, currencyConverterSchema, debtToIncomeCalculatorSchema, dividendCalculatorSchema, investmentReturnCalculatorSchema, loanAmortizationCalculatorSchema, modifiedDurationCalculatorSchema, mortgageCalculatorSchema, netWorthCalculatorSchema, portfolioOptimizerCalculatorSchema, retirementCalculatorSchema, ruleOf72CalculatorSchema, savingsGoalCalculatorSchema, stockAnalyzerCalculatorSchema } from '../validators/calculator.validator';
 import { ApiError } from '../utils/ApiError';
 import { ZodError } from 'zod';
+import { CalculatorHistoryService } from '../services/calculator-history.service';
+import { AuthRequest } from '../types';
+import { logger } from '../utils/logger';
+import { ApiResponseUtil } from '../utils/ApiResponse';
 
 /**
  * Calculator Controller
@@ -335,43 +339,178 @@ export class CalculatorController {
     }
 
     // Premium Tools
-    static async analyzeStock(req: Request, res: Response) {
+    static async analyzeStock(req: AuthRequest, res: Response, next: NextFunction) {
         try {
+            const userId = req.user?.id;
+
+            console.log(userId)
+
+            if (!userId) {
+                throw new Error('User ID not found in request');
+            }
+
+            // Validate input
             const validatedData = stockAnalyzerCalculatorSchema.parse(req);
-            const result = await CalculatorService.analyzeStock(validatedData.body);
+            const inputData = validatedData.body;
 
-            res.status(200).json({
-                success: true,
-                data: result,
-            });
+            console.log(inputData, 'inputData')
+
+            logger.info(`Stock analyzer request for user: ${userId}, symbol: ${inputData.symbol}`);
+
+            // Calculate result
+            const result = await CalculatorService.analyzeStock(inputData);
+
+            // Save to history
+            await CalculatorHistoryService.saveCalculatorResult(
+                userId,
+                'stock-analyzer',
+                inputData,
+                result
+            );
+
+            logger.info(`Stock analysis completed and saved for user: ${userId}`);
+
+            return ApiResponseUtil.success(
+                res,
+                result,
+                'Stock analysis completed successfully',
+                200
+            );
         } catch (error) {
             if (error instanceof ZodError) {
-                throw ApiError.badRequest('Invalid input data');
+                return next(ApiError.badRequest('Invalid input data'));
             }
             if (error instanceof Error) {
-                throw ApiError.badRequest(error.message);
+                return next(ApiError.badRequest(error.message));
             }
-            throw error;
+            next(error);
         }
     }
 
-    static async optimizePortfolio(req: Request, res: Response) {
+    static async optimizePortfolio(req: AuthRequest, res: Response, next: NextFunction) {
         try {
-            const validatedData = portfolioOptimizerCalculatorSchema.parse(req);
-            const result = await CalculatorService.optimizePortfolio(validatedData.body);
+            const userId = req.user?.id;
 
-            res.status(200).json({
-                success: true,
-                data: result,
-            });
+            if (!userId) {
+                throw new Error('User ID not found in request');
+            }
+
+            // Validate input
+            const validatedData = portfolioOptimizerCalculatorSchema.parse(req);
+            const inputData = validatedData.body;
+
+            logger.info(`Portfolio optimizer request for user: ${userId}`);
+
+            // Calculate result
+            const result = await CalculatorService.optimizePortfolio(inputData);
+
+            // Save to history
+            await CalculatorHistoryService.saveCalculatorResult(
+                userId,
+                'portfolio-optimizer',
+                inputData,
+                result
+            );
+
+            logger.info(`Portfolio optimization completed and saved for user: ${userId}`);
+
+            return ApiResponseUtil.success(
+                res,
+                result,
+                'Portfolio optimization completed successfully',
+                200
+            );
         } catch (error) {
             if (error instanceof ZodError) {
-                throw ApiError.badRequest('Invalid input data');
+                return next(ApiError.badRequest('Invalid input data'));
             }
             if (error instanceof Error) {
-                throw ApiError.badRequest(error.message);
+                return next(ApiError.badRequest(error.message));
             }
-            throw error;
+            next(error);
         }
     }
+
+    static async getCalculatorHistory(req: AuthRequest, res: Response, next: NextFunction) {
+        try {
+            const userId = req.user?.id;
+            const { type } = req.query; // Optional: filter by calculator type
+
+            if (!userId) {
+                throw new Error('User ID not found in request');
+            }
+
+            logger.info(`Calculator history request for user: ${userId}, type: ${type || 'all'}`);
+
+            const history = await CalculatorHistoryService.getCalculatorHistory(
+                userId,
+                type as string | undefined
+            );
+
+            return ApiResponseUtil.success(
+                res,
+                history,
+                'Calculator history retrieved successfully',
+                200
+            );
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    static async getCalculatorHistoryById(req: AuthRequest, res: Response, next: NextFunction) {
+        try {
+            const userId = req.user?.id;
+            const { historyId } = req.params;
+
+            if (!userId) {
+                throw new Error('User ID not found in request');
+            }
+
+            logger.info(`Get calculator history by ID: ${historyId} for user: ${userId}`);
+
+            const history = await CalculatorHistoryService.getCalculatorHistoryById(
+                userId,
+                historyId
+            );
+
+            return ApiResponseUtil.success(
+                res,
+                history,
+                'Calculator history retrieved successfully',
+                200
+            );
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    static async deleteCalculatorHistory(req: AuthRequest, res: Response, next: NextFunction) {
+        try {
+            const userId = req.user?.id;
+            const { historyId } = req.params;
+
+            if (!userId) {
+                throw new Error('User ID not found in request');
+            }
+
+            logger.info(`Delete calculator history: ${historyId} for user: ${userId}`);
+
+            const result = await CalculatorHistoryService.deleteCalculatorHistory(
+                userId,
+                historyId
+            );
+
+            return ApiResponseUtil.success(
+                res,
+                undefined,
+                result.message,
+                200
+            );
+        } catch (error) {
+            next(error);
+        }
+    }
+
+
 }

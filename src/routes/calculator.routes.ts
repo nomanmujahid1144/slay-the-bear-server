@@ -27,4 +27,9 @@ router.post('/savings-goal', CalculatorController.calculateSavingsGoal);
 router.post('/stock-analyzer', authenticate, requirePremium, CalculatorController.analyzeStock);
 router.post('/portfolio-optimizer', authenticate, requirePremium, CalculatorController.optimizePortfolio);
 
+// Premium Calculator's History
+router.get('/history', authenticate, requirePremium, CalculatorController.getCalculatorHistory);
+router.get('/history/:historyId', authenticate, requirePremium, CalculatorController.getCalculatorHistoryById);
+router.delete('/history/:historyId', authenticate, requirePremium, CalculatorController.deleteCalculatorHistory);
+
 export default router;

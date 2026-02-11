@@ -745,6 +745,8 @@ export class CalculatorService {
     const { symbol, term } = input;
     const apiKey = config.ALPHA_VANTAGE_API_KEY;
 
+    console.log(apiKey, 'apiKey')
+
     try {
       // Fetch company overview
       const overviewResponse = await axios.get(
