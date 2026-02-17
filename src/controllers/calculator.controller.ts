@@ -13,6 +13,10 @@ import { ApiResponseUtil } from '../utils/ApiResponse';
  */
 export class CalculatorController {
 
+    private static getZodError(error: ZodError): string {
+        return error.issues[0]?.message || 'Invalid input data';
+    }
+    
     static async calculateBondPrice(req: Request, res: Response) {
         try {
             // Validate request (schema includes body wrapper)
@@ -29,7 +33,7 @@ export class CalculatorController {
         } catch (error) {
             // Handle Zod validation errors
             if (error instanceof ZodError) {
-                throw ApiError.badRequest('Invalid input data');
+                throw ApiError.badRequest(CalculatorController.getZodError(error));
             }
             throw error;
         }
@@ -51,7 +55,7 @@ export class CalculatorController {
         } catch (error) {
             // Handle Zod validation errors
             if (error instanceof ZodError) {
-                throw ApiError.badRequest('Invalid input data');
+                throw ApiError.badRequest(CalculatorController.getZodError(error));
             }
             throw error;
         }
@@ -68,7 +72,7 @@ export class CalculatorController {
             });
         } catch (error) {
             if (error instanceof ZodError) {
-                throw ApiError.badRequest('Invalid input data');
+                throw ApiError.badRequest(CalculatorController.getZodError(error));
             }
             if (error instanceof Error) {
                 throw ApiError.badRequest(error.message);
@@ -88,7 +92,7 @@ export class CalculatorController {
             });
         } catch (error) {
             if (error instanceof ZodError) {
-                throw ApiError.badRequest('Invalid input data');
+                throw ApiError.badRequest(CalculatorController.getZodError(error));
             }
             throw error;
         }
@@ -105,7 +109,7 @@ export class CalculatorController {
             });
         } catch (error) {
             if (error instanceof ZodError) {
-                throw ApiError.badRequest('Invalid input data');
+                throw ApiError.badRequest(CalculatorController.getZodError(error));
             }
             throw error;
         }
@@ -122,7 +126,7 @@ export class CalculatorController {
             });
         } catch (error) {
             if (error instanceof ZodError) {
-                throw ApiError.badRequest('Invalid input data');
+                throw ApiError.badRequest(CalculatorController.getZodError(error));
             }
             throw error;
         }
@@ -139,7 +143,7 @@ export class CalculatorController {
             });
         } catch (error) {
             if (error instanceof ZodError) {
-                throw ApiError.badRequest('Invalid input data');
+                throw ApiError.badRequest(CalculatorController.getZodError(error));
             }
             if (error instanceof Error) {
                 throw ApiError.badRequest(error.message);
@@ -159,7 +163,7 @@ export class CalculatorController {
             });
         } catch (error) {
             if (error instanceof ZodError) {
-                throw ApiError.badRequest('Invalid input data');
+                throw ApiError.badRequest(CalculatorController.getZodError(error));
             }
             if (error instanceof Error) {
                 throw ApiError.badRequest(error.message);
@@ -179,7 +183,7 @@ export class CalculatorController {
             });
         } catch (error) {
             if (error instanceof ZodError) {
-                throw ApiError.badRequest('Invalid input data');
+                throw ApiError.badRequest(CalculatorController.getZodError(error));
             }
             throw error;
         }
@@ -196,7 +200,7 @@ export class CalculatorController {
             });
         } catch (error) {
             if (error instanceof ZodError) {
-                throw ApiError.badRequest('Invalid input data');
+                throw ApiError.badRequest(CalculatorController.getZodError(error));
             }
             throw error;
         }
@@ -213,7 +217,7 @@ export class CalculatorController {
             });
         } catch (error) {
             if (error instanceof ZodError) {
-                throw ApiError.badRequest('Invalid input data');
+                throw ApiError.badRequest(CalculatorController.getZodError(error));
             }
             throw error;
         }
@@ -230,7 +234,7 @@ export class CalculatorController {
             });
         } catch (error) {
             if (error instanceof ZodError) {
-                throw ApiError.badRequest('Invalid input data');
+                throw ApiError.badRequest(CalculatorController.getZodError(error));
             }
             throw error;
         }
@@ -247,7 +251,7 @@ export class CalculatorController {
             });
         } catch (error) {
             if (error instanceof ZodError) {
-                throw ApiError.badRequest('Invalid input data');
+                throw ApiError.badRequest(CalculatorController.getZodError(error));
             }
             throw error;
         }
@@ -264,7 +268,7 @@ export class CalculatorController {
             });
         } catch (error) {
             if (error instanceof ZodError) {
-                throw ApiError.badRequest('Invalid input data');
+                throw ApiError.badRequest(CalculatorController.getZodError(error));
             }
             throw error;
         }
@@ -281,7 +285,7 @@ export class CalculatorController {
             });
         } catch (error) {
             if (error instanceof ZodError) {
-                throw ApiError.badRequest('Invalid input data');
+                throw ApiError.badRequest(CalculatorController.getZodError(error));
             }
             throw error;
         }
@@ -298,7 +302,7 @@ export class CalculatorController {
             });
         } catch (error) {
             if (error instanceof ZodError) {
-                throw ApiError.badRequest('Invalid input data');
+                throw ApiError.badRequest(CalculatorController.getZodError(error));
             }
             throw error;
         }
@@ -315,7 +319,7 @@ export class CalculatorController {
             });
         } catch (error) {
             if (error instanceof ZodError) {
-                throw ApiError.badRequest('Invalid input data');
+                throw ApiError.badRequest(CalculatorController.getZodError(error));
             }
             throw error;
         }
@@ -332,7 +336,7 @@ export class CalculatorController {
             });
         } catch (error) {
             if (error instanceof ZodError) {
-                throw ApiError.badRequest('Invalid input data');
+                throw ApiError.badRequest(CalculatorController.getZodError(error));
             }
             throw error;
         }
@@ -343,7 +347,7 @@ export class CalculatorController {
         try {
             const userId = req.user?.id;
 
-            console.log(userId)
+            console.log(userId, 'userId')
 
             if (!userId) {
                 throw new Error('User ID not found in request');
@@ -378,9 +382,10 @@ export class CalculatorController {
             );
         } catch (error) {
             if (error instanceof ZodError) {
-                return next(ApiError.badRequest('Invalid input data'));
+                return next(ApiError.badRequest(CalculatorController.getZodError(error)));
             }
             if (error instanceof Error) {
+                console.log(error, 'error')
                 return next(ApiError.badRequest(error.message));
             }
             next(error);
@@ -422,7 +427,7 @@ export class CalculatorController {
             );
         } catch (error) {
             if (error instanceof ZodError) {
-                return next(ApiError.badRequest('Invalid input data'));
+                return next(ApiError.badRequest(CalculatorController.getZodError(error)));
             }
             if (error instanceof Error) {
                 return next(ApiError.badRequest(error.message));
@@ -435,6 +440,8 @@ export class CalculatorController {
         try {
             const userId = req.user?.id;
             const { type } = req.query; // Optional: filter by calculator type
+
+            console.log(type)
 
             if (!userId) {
                 throw new Error('User ID not found in request');

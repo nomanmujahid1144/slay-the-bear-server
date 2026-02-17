@@ -2,8 +2,7 @@ import { Router } from 'express';
 import { StripeController } from '../controllers/stripe.controller';
 import { authenticate } from '../middlewares/auth.middleware';
 import { validate } from '../middlewares/validate.middleware';
-import { z } from 'zod';
-import { createCheckoutSchema } from '../validators/stripe.validator';
+import { createCheckoutSchema, changePlanSchema } from '../validators/stripe.validator';
 
 const router = Router();
 
@@ -54,5 +53,13 @@ router.post(
  * @access  Private (requires authentication)
  */
 router.get('/customer-portal', authenticate, StripeController.getCustomerPortal);
+
+
+router.post(
+  '/change-plan',
+  authenticate,
+  validate(changePlanSchema),
+  StripeController.changePlan
+);
 
 export default router;

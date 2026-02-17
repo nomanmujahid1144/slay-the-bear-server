@@ -10,6 +10,33 @@ import { Plan } from '../constants/enums';
 import config from '../config';
 
 export class WebhookService {
+
+  // ── Helper: map priceId → correct Plan ──────────────────────────────────
+  private static getPlanFromPriceId(priceId: string): Plan {
+    const basicPriceIds = [
+      config.STRIPE_BASIC_MONTHLY_PRICE_ID,
+      config.STRIPE_BASIC_YEARLY_PRICE_ID,
+    ];
+    const premiumPriceIds = [
+      config.STRIPE_PREMIUM_MONTHLY_PRICE_ID,
+      config.STRIPE_PREMIUM_YEARLY_PRICE_ID,
+    ];
+
+    if (basicPriceIds.includes(priceId)) return Plan.BASIC;
+    if (premiumPriceIds.includes(priceId)) return Plan.PREMIUM;
+
+    throw new Error(`Unknown price ID: ${priceId}`);
+  }
+
+  // ── Helper: map priceId → period ────────────────────────────────────────
+  private static getPeriodFromPriceId(priceId: string): 'monthly' | 'yearly' {
+    const yearlyPriceIds = [
+      config.STRIPE_BASIC_YEARLY_PRICE_ID,
+      config.STRIPE_PREMIUM_YEARLY_PRICE_ID,
+    ];
+    return yearlyPriceIds.includes(priceId) ? 'yearly' : 'monthly';
+  }
+
   /**
    * Verify Stripe Webhook Signature
    */
@@ -114,18 +141,15 @@ export class WebhookService {
       const isSubscription = item.price?.type === 'recurring';
 
       if (isSubscription && priceId) {
-        // Determine subscription period
-        let period: 'monthly' | 'yearly';
-        let endDate = new Date();
+        // Determine plan and period from priceId — not hardcoded
+        const plan = this.getPlanFromPriceId(priceId);
+        const period = this.getPeriodFromPriceId(priceId);
 
-        if (priceId === config.STRIPE_YEARLY_PRICE_ID) {
-          period = 'yearly';
+        let endDate = new Date();
+        if (period === 'yearly') {
           endDate.setFullYear(endDate.getFullYear() + 1);
-        } else if (priceId === config.STRIPE_MONTHLY_PRICE_ID) {
-          period = 'monthly';
-          endDate.setMonth(endDate.getMonth() + 1);
         } else {
-          throw new Error(`Unknown price ID: ${priceId}`);
+          endDate.setMonth(endDate.getMonth() + 1);
         }
 
         // Get invoice details
@@ -145,7 +169,7 @@ export class WebhookService {
           await db
             .update(subscriptions)
             .set({
-              plan: Plan.PREMIUM,
+              plan: plan,
               period: period,
               startDate: new Date(),
               endDate: endDate,
@@ -160,7 +184,7 @@ export class WebhookService {
             .insert(subscriptions)
             .values({
               userId: user.id,
-              plan: Plan.PREMIUM,
+              plan: plan,
               period: period,
               startDate: new Date(),
               endDate: endDate,
@@ -183,11 +207,11 @@ export class WebhookService {
         });
 
         // Update user plan
-        await UserService.updateUserPlan(user.id, Plan.PREMIUM);
+        await UserService.updateUserPlan(user.id, plan);
 
         logger.info('Subscription created successfully', {
           userId: user.id,
-          plan: Plan.PREMIUM,
+          plan,
           period,
         });
       }
@@ -238,22 +262,17 @@ export class WebhookService {
     // Handle renewal or reactivation
     if (subscription.status === 'active') {
       const priceId = subscription.items.data[0].price.id;
-      let period: 'monthly' | 'yearly';
-      let endDate = new Date((subscription as any).current_period_end * 1000);
 
-      if (priceId === config.STRIPE_YEARLY_PRICE_ID) {
-        period = 'yearly';
-      } else if (priceId === config.STRIPE_MONTHLY_PRICE_ID) {
-        period = 'monthly';
-      } else {
-        throw new Error(`Unknown price ID: ${priceId}`);
-      }
+      // Determine plan and period from priceId — not hardcoded
+      const plan = this.getPlanFromPriceId(priceId);
+      const period = this.getPeriodFromPriceId(priceId);
+      const endDate = new Date((subscription as any).current_period_end * 1000);
 
       // Update subscription
       await db
         .update(subscriptions)
         .set({
-          plan: Plan.PREMIUM,
+          plan: plan,
           period: period,
           endDate: endDate,
           updatedAt: new Date(),
@@ -261,9 +280,9 @@ export class WebhookService {
         .where(eq(subscriptions.userId, userId));
 
       // Update user plan
-      await UserService.updateUserPlan(userId, Plan.PREMIUM);
+      await UserService.updateUserPlan(userId, plan);
 
-      logger.info('Subscription updated to active', { userId, period });
+      logger.info('Subscription updated to active', { userId, plan, period });
     }
   }
 
@@ -379,9 +398,10 @@ export class WebhookService {
 
       if (userSubscription.length > 0) {
         const subscriptionId = userSubscription[0].id;
-
-        const priceId = subscription.items.data[0].price.id;
-        let endDate = new Date((subscription as any).current_period_end * 1000);
+        const periodStart = (subscription as any).current_period_start;
+        const periodEnd = (subscription as any).current_period_end;
+        const endDate = periodEnd ? new Date(periodEnd * 1000) : new Date();
+        const startDate = periodStart ? new Date(periodStart * 1000) : new Date();
 
         // Add new invoice entry for renewal
         await db.insert(subscriptionEntries).values({
@@ -389,7 +409,7 @@ export class WebhookService {
           invoiceId: (invoice as any).number || 'N/A',
           amount: (((invoice as any).amount_paid || 0) / 100).toString(),
           status: 'Renewal',
-          startDate: new Date((subscription as any).current_period_start * 1000),
+          startDate: startDate,
           endDate: endDate,
           viewURL: (invoice as any).hosted_invoice_url || null,
           downloadURL: (invoice as any).invoice_pdf || null,

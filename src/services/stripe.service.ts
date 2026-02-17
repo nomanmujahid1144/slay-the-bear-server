@@ -21,7 +21,8 @@ export class StripeService {
   static async createCheckoutSession(
     userId: string,
     priceId: string,
-    period: 'monthly' | 'yearly'
+    period: 'monthly' | 'yearly',
+    planType: 'basic' | 'premium'
   ): Promise<{ url: string }> {
     try {
       logger.info(`Creating checkout session for user: ${userId}`);
@@ -68,6 +69,7 @@ export class StripeService {
         metadata: {
           userId: user.id,
           period: period,
+          planType: planType,
         },
         success_url: `${config.FRONTEND_URL}/purchase-success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${config.FRONTEND_URL}/pricing`,
@@ -243,6 +245,133 @@ export class StripeService {
       throw error instanceof ApiError ? error : ApiError.internal(error.message);
     }
   }
+
+  /**
+   * Change Plan (Upgrade or Downgrade)
+   * Upgrade → immediate with proration
+   * Downgrade → scheduled at period end
+   */
+  static async changePlan(
+    userId: string,
+    planType: 'basic' | 'premium',
+    period: 'monthly' | 'yearly'
+  ): Promise<{
+    message: string;
+    changeType: 'upgrade' | 'downgrade';
+    effectiveDate: string;
+    newPlan: string;
+    newPeriod: string;
+  }> {
+    try {
+      logger.info(`Change plan request for user: ${userId}, plan: ${planType}, period: ${period}`);
+
+      // Step 1: Get user
+      const user = await UserService.getUserById(userId);
+
+      if (!user.customerId) {
+        throw ApiError.badRequest('No active subscription found. Please subscribe first.');
+      }
+
+      // Step 2: Get current active Stripe subscription
+      const stripeSubscriptions = await stripe.subscriptions.list({
+        customer: user.customerId,
+        status: 'active',
+        limit: 1,
+      });
+
+      if (stripeSubscriptions.data.length === 0) {
+        throw ApiError.notFound('No active subscription found. Please subscribe first.');
+      }
+
+      const currentSubscription = stripeSubscriptions.data[0];
+      const currentPriceId = currentSubscription.items.data[0].price.id;
+
+      // Step 3: Determine new priceId from planType + period
+      const newPriceId =
+        planType === 'basic' && period === 'monthly' ? config.STRIPE_BASIC_MONTHLY_PRICE_ID :
+          planType === 'basic' && period === 'yearly' ? config.STRIPE_BASIC_YEARLY_PRICE_ID :
+            planType === 'premium' && period === 'monthly' ? config.STRIPE_PREMIUM_MONTHLY_PRICE_ID :
+              config.STRIPE_PREMIUM_YEARLY_PRICE_ID;
+
+      // Step 4: Check if user is already on the same plan
+      if (currentPriceId === newPriceId) {
+        throw ApiError.badRequest(`You are already on the ${planType} ${period} plan.`);
+      }
+
+      // Step 5: Determine if this is upgrade or downgrade
+      // Premium > Basic in terms of plan value
+      // Yearly > Monthly in terms of period value
+      const planHierarchy: Record<string, number> = {
+        [config.STRIPE_BASIC_MONTHLY_PRICE_ID]: 1,
+        [config.STRIPE_BASIC_YEARLY_PRICE_ID]: 2,
+        [config.STRIPE_PREMIUM_MONTHLY_PRICE_ID]: 3,
+        [config.STRIPE_PREMIUM_YEARLY_PRICE_ID]: 4,
+      };
+
+      const currentRank = planHierarchy[currentPriceId] ?? 0;
+      const newRank = planHierarchy[newPriceId] ?? 0;
+      const isUpgrade = newRank > currentRank;
+
+      // Step 6: Apply the change
+      if (isUpgrade) {
+        // UPGRADE → immediate with proration
+        // Stripe charges the difference right away
+        await stripe.subscriptions.update(currentSubscription.id, {
+          items: [
+            {
+              id: currentSubscription.items.data[0].id,
+              price: newPriceId,
+            },
+          ],
+          proration_behavior: 'create_prorations', // Charge difference immediately
+        });
+
+        logger.info(`Plan upgraded immediately for user: ${userId} → ${planType} ${period}`);
+
+        return {
+          message: `Successfully upgraded to ${planType} ${period} plan. The price difference has been charged immediately.`,
+          changeType: 'upgrade',
+          effectiveDate: 'Immediately',
+          newPlan: planType,
+          newPeriod: period,
+        };
+      } else {
+        // DOWNGRADE → schedule at period end
+        // User keeps current plan until billing period ends
+        // Better UX — no partial refunds, no confusion
+        await stripe.subscriptions.update(currentSubscription.id, {
+          items: [
+            {
+              id: currentSubscription.items.data[0].id,
+              price: newPriceId,
+            },
+          ],
+          proration_behavior: 'none',         // No immediate charge/refund
+          billing_cycle_anchor: 'unchanged',  // Keep current billing cycle
+        });
+
+        // Calculate when downgrade takes effect (next billing date)
+        const currentPeriodEnd = (currentSubscription as any).current_period_end;
+        const periodEnd = currentPeriodEnd
+          ? new Date(currentPeriodEnd * 1000)
+          : new Date();
+
+        logger.info(`Plan downgrade scheduled for user: ${userId} → ${planType} ${period} at ${periodEnd}`);
+
+        return {
+          message: `Your plan will be downgraded to ${planType} ${period} at the end of your current billing period.`,
+          changeType: 'downgrade',
+          effectiveDate: currentPeriodEnd ? periodEnd.toISOString() : 'End of billing period',
+          newPlan: planType,
+          newPeriod: period,
+        };
+      }
+    } catch (error: any) {
+      logger.error('Change plan error', { error: error.message, userId });
+      throw error instanceof ApiError ? error : ApiError.internal(error.message);
+    }
+  }
+
 }
 
 export { stripe };

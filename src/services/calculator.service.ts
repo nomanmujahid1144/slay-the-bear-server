@@ -752,6 +752,9 @@ export class CalculatorService {
       const overviewResponse = await axios.get(
         `https://www.alphavantage.co/query?function=OVERVIEW&symbol=${symbol}&apikey=${apiKey}`
       );
+
+      console.log(overviewResponse, 'overviewResponse')
+
       const dataCompany = overviewResponse.data;
 
       const companyName = dataCompany.Name || 'N/A';
@@ -835,48 +838,167 @@ export class CalculatorService {
   }
 
   // Profile Optimization
+  // private static simpleOptimization(
+  //   returns: number[][],
+  //   targetReturn: number,
+  //   numAssets: number
+  // ): number[] {
+  //   let bestWeights: number[] = [];
+  //   let bestVolatility = Infinity;
+
+  //   // Simple grid search
+  //   const steps = numAssets <= 5 ? 10 : numAssets <= 8 ? 6 : 4;
+
+  //   const generateWeights = (index: number, remaining: number, current: number[]): void => {
+  //     if (index === numAssets - 1) {
+  //       current[index] = remaining;
+  //       const weights = [...current];
+
+  //       // Check if meets target return
+  //       const portReturn = this.portfolioReturn(weights, returns);
+  //       if (portReturn >= targetReturn) {
+  //         const volatility = this.portfolioVolatility(weights, returns);
+  //         if (volatility < bestVolatility) {
+  //           bestVolatility = volatility;
+  //           bestWeights = [...weights];
+  //         }
+  //       }
+  //       return;
+  //     }
+
+  //     for (let i = 0; i <= steps; i++) {
+  //       const weight = (i / steps) * remaining;
+  //       current[index] = weight;
+  //       generateWeights(index + 1, remaining - weight, current);
+  //     }
+  //   };
+
+  //   generateWeights(0, 1, new Array(numAssets).fill(0));
+
+  //   // If no valid solution, use equal weights
+  //   if (bestWeights.length === 0) {
+  //     bestWeights = Array(numAssets).fill(1 / numAssets);
+  //   }
+
+  //   return bestWeights;
+  // }
+
   private static simpleOptimization(
     returns: number[][],
     targetReturn: number,
     numAssets: number
   ): number[] {
-    let bestWeights: number[] = [];
-    let bestVolatility = Infinity;
 
-    // Simple grid search
-    const steps = 20;
-    const generateWeights = (index: number, remaining: number, current: number[]): void => {
-      if (index === numAssets - 1) {
-        current[index] = remaining;
-        const weights = [...current];
+    // Calculate mean returns for each asset
+    const meanReturns = returns.map(assetReturns =>
+      assetReturns.reduce((sum, val) => sum + val, 0) / assetReturns.length * 12
+    );
 
-        // Check if meets target return
-        const portReturn = this.portfolioReturn(weights, returns);
-        if (portReturn >= targetReturn) {
-          const volatility = this.portfolioVolatility(weights, returns);
-          if (volatility < bestVolatility) {
-            bestVolatility = volatility;
-            bestWeights = [...weights];
+    // Step 1: Filter assets that contribute positively
+    const positiveAssets = meanReturns.map((ret, i) => ({ ret, i }))
+      .filter(a => a.ret > 0)
+      .sort((a, b) => b.ret - a.ret); // Sort by return descending
+
+    // Step 2: Start with equal weights
+    let weights = new Array(numAssets).fill(1 / numAssets);
+
+    // Step 3: Iterative gradient-based optimization (200 iterations)
+    const learningRate = 0.01;
+
+    for (let iter = 0; iter < 200; iter++) {
+      const currentVolatility = this.portfolioVolatility(weights, returns);
+      const covMatrix = this.calculateCovarianceMatrix(returns);
+
+      // Calculate gradient of volatility with respect to each weight
+      const gradient = new Array(numAssets).fill(0);
+      for (let i = 0; i < numAssets; i++) {
+        for (let j = 0; j < numAssets; j++) {
+          gradient[i] += covMatrix[i][j] * weights[j];
+        }
+        gradient[i] = gradient[i] / (currentVolatility + 1e-10);
+      }
+
+      // Update weights: move in direction that reduces volatility
+      for (let i = 0; i < numAssets; i++) {
+        weights[i] -= learningRate * gradient[i];
+        weights[i] = Math.max(0, weights[i]); // No short selling
+      }
+
+      // Normalize weights to sum to 1
+      const total = weights.reduce((s, w) => s + w, 0);
+      weights = weights.map(w => w / total);
+
+      // Check if target return is met
+      const currentReturn = this.portfolioReturn(weights, returns);
+      if (currentReturn < targetReturn) {
+        // Boost weights of high-return assets
+        for (let i = 0; i < numAssets; i++) {
+          if (meanReturns[i] > targetReturn / 12) {
+            weights[i] += learningRate * 0.5;
           }
         }
-        return;
+        // Re-normalize
+        const t = weights.reduce((s, w) => s + w, 0);
+        weights = weights.map(w => w / t);
       }
-
-      for (let i = 0; i <= steps; i++) {
-        const weight = (i / steps) * remaining;
-        current[index] = weight;
-        generateWeights(index + 1, remaining - weight, current);
-      }
-    };
-
-    generateWeights(0, 1, new Array(numAssets).fill(0));
-
-    // If no valid solution, use equal weights
-    if (bestWeights.length === 0) {
-      bestWeights = Array(numAssets).fill(1 / numAssets);
     }
 
-    return bestWeights;
+    // Final check: if return still not met, use return-weighted allocation
+    const finalReturn = this.portfolioReturn(weights, returns);
+    if (finalReturn < targetReturn) {
+      // Fallback: weight by positive returns only
+      const positiveReturns = meanReturns.map(r => Math.max(0, r));
+      const totalPositive = positiveReturns.reduce((s, r) => s + r, 0);
+      if (totalPositive > 0) {
+        weights = positiveReturns.map(r => r / totalPositive);
+      } else {
+        weights = new Array(numAssets).fill(1 / numAssets);
+      }
+    }
+
+    return weights;
+  }
+
+  private static async fetchStocksBatched(
+    symbols: { symbol: string }[],
+    apiKey: string
+  ): Promise<Array<{ symbol: string; data: number[] }>> {
+
+    // Paid tier: 75 req/min → batch all symbols together with 1s between batches
+    const BATCH_SIZE = 10;
+    const DELAY_MS = 1000;
+
+    const results: Array<{ symbol: string; data: number[] }> = [];
+    const batches: { symbol: string }[][] = [];
+
+    for (let i = 0; i < symbols.length; i += BATCH_SIZE) {
+      batches.push(symbols.slice(i, i + BATCH_SIZE));
+    }
+
+    console.log(`📊 ${symbols.length} symbols → ${batches.length} batch(es) of max ${BATCH_SIZE}`);
+
+    for (let i = 0; i < batches.length; i++) {
+      const batch = batches[i];
+      console.log(`⚡ Batch ${i + 1}/${batches.length}: fetching [${batch.map(s => s.symbol).join(', ')}] in parallel...`);
+
+      const batchResults = await Promise.all(
+        batch.map(async (sym) => {
+          const data = await this.getStockData(sym.symbol, apiKey);
+          console.log(`✅ ${sym.symbol} fetched`);
+          return { symbol: sym.symbol, data };
+        })
+      );
+
+      results.push(...batchResults);
+
+      if (i < batches.length - 1) {
+        console.log(`⏳ Waiting ${DELAY_MS}ms before next batch...`);
+        await new Promise(resolve => setTimeout(resolve, DELAY_MS));
+      }
+    }
+
+    console.log(`🎯 All ${symbols.length} symbols fetched!`);
+    return results;
   }
 
   private static async getStockData(symbol: string, apiKey: string): Promise<number[]> {
@@ -966,17 +1088,7 @@ export class CalculatorService {
 
     try {
       // Fetch stock data
-      const stockData = await Promise.all(
-        symbols.map(async (symbol) => {
-          try {
-            const data = await this.getStockData(symbol.symbol, apiKey);
-            return { symbol: symbol.symbol, data };
-          } catch (error) {
-            console.error(`Error fetching ${symbol.symbol}:`, error);
-            throw error;
-          }
-        })
-      );
+      const stockData = await this.fetchStocksBatched(symbols, apiKey);
 
       // Calculate returns
       const prices = stockData.map((item) => item.data);

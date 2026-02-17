@@ -12,13 +12,16 @@ async function startServer() {
     await connectDatabase();
 
     // Start Express server
-    app.listen(config.PORT, () => {
+    const server = app.listen(config.PORT, () => {
       logger.info(`🚀 Server started successfully!`);
       logger.info(`📡 Port: ${config.PORT}`);
       logger.info(`🌍 Environment: ${config.NODE_ENV}`);
       logger.info(`🐻 Slay The Bear API is running`);
       logger.info(`📝 API Docs: http://localhost:${config.PORT}/api/health`);
     });
+
+    server.timeout = 300000; // 5 min timeout for long portfolio requests
+
   } catch (error) {
     logger.error('Failed to start server:', error);
     process.exit(1);

@@ -73,6 +73,33 @@ export const requirePremium = async (
 };
 
 /**
+ * Middleware to check if user has basic plan or higher
+ * Allows: basic, premium
+ * Blocks: free
+ */
+export const requireBasic = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    if (!req.user) {
+      throw ApiError.unauthorized('Authentication required');
+    }
+
+    const allowedPlans = [Plan.BASIC, Plan.PREMIUM];
+
+    if (!allowedPlans.includes(req.user.plan as Plan)) {
+      throw ApiError.forbidden('Basic subscription or higher required');
+    }
+
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * Optional authentication - doesn't throw error if no token
  */
 export const optionalAuth = async (

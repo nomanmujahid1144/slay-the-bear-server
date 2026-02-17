@@ -30,11 +30,21 @@ interface Config {
     // Add Stripe config
     STRIPE_SECRET_KEY: string,
     STRIPE_WEBHOOK_SECRET: string,
-    STRIPE_MONTHLY_PRICE_ID: string,
-    STRIPE_YEARLY_PRICE_ID: string,
+    // Add Stripe Premium Keys
+    STRIPE_PREMIUM_MONTHLY_PRICE_ID: string,
+    STRIPE_PREMIUM_YEARLY_PRICE_ID: string,
+    // Add Stripe Basic Keys
+    STRIPE_BASIC_MONTHLY_PRICE_ID: string,
+    STRIPE_BASIC_YEARLY_PRICE_ID: string,
 
     // Alpha Vantage
     ALPHA_VANTAGE_API_KEY: string,
+
+    // IAP (In-App Purchase)
+    APPLE_SHARED_SECRET: string;
+    APPLE_SANDBOX_URL: string;
+    APPLE_PRODUCTION_URL: string;
+    GOOGLE_SERVICE_ACCOUNT_KEY: string;
 
 
     // Frontend
@@ -71,10 +81,21 @@ const config: Config = {
     // Add Stripe config
     STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY || '',
     STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET || '',
-    STRIPE_MONTHLY_PRICE_ID: process.env.STRIPE_MONTHLY_PRICE_ID || '',
-    STRIPE_YEARLY_PRICE_ID: process.env.STRIPE_YEARLY_PRICE_ID || '',
+    // Add Stripe Premium Keys
+    STRIPE_PREMIUM_MONTHLY_PRICE_ID: process.env.STRIPE_PREMIUM_MONTHLY_PRICE_ID || '',
+    STRIPE_PREMIUM_YEARLY_PRICE_ID: process.env.STRIPE_PREMIUM_YEARLY_PRICE_ID || '',
+    // Add Stripe Basic Keys
+    STRIPE_BASIC_MONTHLY_PRICE_ID: process.env.STRIPE_BASIC_MONTHLY_PRICE_ID || '',
+    STRIPE_BASIC_YEARLY_PRICE_ID: process.env.STRIPE_BASIC_YEARLY_PRICE_ID || '',
+
 
     ALPHA_VANTAGE_API_KEY: process.env.ALPHA_VANTAGE_API_KEY || '',
+
+    // IAP (In-App Purchase)
+    APPLE_SHARED_SECRET: process.env.APPLE_SHARED_SECRET || '',
+    APPLE_SANDBOX_URL: process.env.APPLE_SANDBOX_URL || 'https://sandbox.itunes.apple.com/verifyReceipt',
+    APPLE_PRODUCTION_URL: process.env.APPLE_PRODUCTION_URL || 'https://buy.itunes.apple.com/verifyReceipt',
+    GOOGLE_SERVICE_ACCOUNT_KEY: process.env.GOOGLE_SERVICE_ACCOUNT_KEY || '',
 
     // Frontend
     FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:3000',

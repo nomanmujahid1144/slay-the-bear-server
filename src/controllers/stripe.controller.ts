@@ -20,7 +20,7 @@ export class StripeController {
   ) {
     try {
       const userId = req.user?.id;
-      const { period } = req.body; // 'monthly' or 'yearly'
+      const { period, planType } = req.body; // period: 'monthly'|'yearly', planType: 'basic'|'premium'
 
       if (!userId) {
         throw new Error('User ID not found in request');
@@ -29,12 +29,16 @@ export class StripeController {
       logger.info(`Checkout session request for user: ${userId}, period: ${period}`);
 
       // Determine price ID based on period
-      const priceId =
-        period === 'monthly'
-          ? config.STRIPE_MONTHLY_PRICE_ID
-          : config.STRIPE_YEARLY_PRICE_ID;
+      logger.info(`Checkout session request for user: ${userId}, plan: ${planType}, period: ${period}`);
 
-      const result = await StripeService.createCheckoutSession(userId, priceId, period);
+      // Map planType + period → correct Stripe price ID
+      const priceId =
+        planType === 'basic' && period === 'monthly' ? config.STRIPE_BASIC_MONTHLY_PRICE_ID :
+          planType === 'basic' && period === 'yearly' ? config.STRIPE_BASIC_YEARLY_PRICE_ID :
+            planType === 'premium' && period === 'monthly' ? config.STRIPE_PREMIUM_MONTHLY_PRICE_ID :
+              config.STRIPE_PREMIUM_YEARLY_PRICE_ID;
+
+      const result = await StripeService.createCheckoutSession(userId, priceId, period, planType);
 
       return ApiResponseUtil.success(
         res,
@@ -156,4 +160,37 @@ export class StripeController {
       next(error);
     }
   }
+
+  /**
+   * POST /api/stripe/change-plan
+   * Upgrade or downgrade subscription plan
+   */
+  static async changePlan(
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+  ) {
+    try {
+      const userId = req.user?.id;
+      const { planType, period } = req.body;
+
+      if (!userId) {
+        throw new Error('User ID not found in request');
+      }
+
+      logger.info(`Change plan request for user: ${userId}, plan: ${planType}, period: ${period}`);
+
+      const result = await StripeService.changePlan(userId, planType, period);
+
+      return ApiResponseUtil.success(
+        res,
+        result,
+        result.message,
+        200
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
 }
