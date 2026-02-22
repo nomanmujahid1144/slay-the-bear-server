@@ -4,6 +4,7 @@ import userRoutes from './user.routes';
 import stripeRoutes from './stripe.routes';
 import calculatorRoutes from './calculator.routes';
 import legalRoutes from './legal.routes';
+import iap from './iap.routes';
 
 const router = Router();
 
@@ -26,6 +27,7 @@ router.use('/users', userRoutes);
 router.use('/stripe', stripeRoutes);
 router.use('/calculators', calculatorRoutes);
 router.use('/legal', legalRoutes);
+router.use('/iap', iap);
 // router.use('/webhooks', webhookRoutes);
 
 export default router;
