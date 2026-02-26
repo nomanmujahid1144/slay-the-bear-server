@@ -89,19 +89,15 @@ export const changePasswordSchema = z.object({
   body: z.object({
     userId: z.string().uuid('Invalid user ID'),
     password: passwordValidation,
-    confirmPassword: passwordValidation,
-  }).refine((data) => data.password === data.confirmPassword, {
-    message: 'Passwords do not match',
-    path: ['confirmPassword'],
   }),
 });
 
 // Refresh Token Schema
-export const refreshTokenSchema = z.object({
-  body: z.object({
-    refreshToken: z.string().min(1, 'Refresh token is required'),
-  }),
-});
+// export const refreshTokenSchema = z.object({
+//   body: z.object({
+//     refreshToken: z.string().min(1, 'Refresh token is required'),
+//   }),
+// });
 
 
 // Refferal Code
@@ -120,4 +116,4 @@ export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>['body'];
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>['body'];
 export type VerifyResetTokenInput = z.infer<typeof verifyResetTokenSchema>['body'];
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>['body'];
-export type RefreshTokenInput = z.infer<typeof refreshTokenSchema>['body'];
+// export type RefreshTokenInput = z.infer<typeof refreshTokenSchema>['body'];

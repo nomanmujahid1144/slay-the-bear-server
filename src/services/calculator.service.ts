@@ -145,7 +145,6 @@ export class CalculatorService {
     };
   }
 
-
   static calculateBudget(input: BudgetCalculatorInput) {
     const { income, expenses } = input;
 
@@ -838,125 +837,90 @@ export class CalculatorService {
   }
 
   // Profile Optimization
-  // private static simpleOptimization(
-  //   returns: number[][],
-  //   targetReturn: number,
-  //   numAssets: number
-  // ): number[] {
-  //   let bestWeights: number[] = [];
-  //   let bestVolatility = Infinity;
-
-  //   // Simple grid search
-  //   const steps = numAssets <= 5 ? 10 : numAssets <= 8 ? 6 : 4;
-
-  //   const generateWeights = (index: number, remaining: number, current: number[]): void => {
-  //     if (index === numAssets - 1) {
-  //       current[index] = remaining;
-  //       const weights = [...current];
-
-  //       // Check if meets target return
-  //       const portReturn = this.portfolioReturn(weights, returns);
-  //       if (portReturn >= targetReturn) {
-  //         const volatility = this.portfolioVolatility(weights, returns);
-  //         if (volatility < bestVolatility) {
-  //           bestVolatility = volatility;
-  //           bestWeights = [...weights];
-  //         }
-  //       }
-  //       return;
-  //     }
-
-  //     for (let i = 0; i <= steps; i++) {
-  //       const weight = (i / steps) * remaining;
-  //       current[index] = weight;
-  //       generateWeights(index + 1, remaining - weight, current);
-  //     }
-  //   };
-
-  //   generateWeights(0, 1, new Array(numAssets).fill(0));
-
-  //   // If no valid solution, use equal weights
-  //   if (bestWeights.length === 0) {
-  //     bestWeights = Array(numAssets).fill(1 / numAssets);
-  //   }
-
-  //   return bestWeights;
-  // }
-
   private static simpleOptimization(
     returns: number[][],
     targetReturn: number,
     numAssets: number
   ): number[] {
 
-    // Calculate mean returns for each asset
+    const MIN_WEIGHT = 1 / (numAssets * 4);   // e.g. 12.5% for 2 assets, 6.25% for 4
+    const MAX_WEIGHT = 0.65;
+    const LEARNING_RATE = 0.003;
+    const ITERATIONS = 800;
+    const RETURN_PENALTY = 20.0;
+
+    // Annualized mean return per asset
     const meanReturns = returns.map(assetReturns =>
-      assetReturns.reduce((sum, val) => sum + val, 0) / assetReturns.length * 12
+      (assetReturns.reduce((sum, val) => sum + val, 0) / assetReturns.length) * 12
     );
 
-    // Step 1: Filter assets that contribute positively
-    const positiveAssets = meanReturns.map((ret, i) => ({ ret, i }))
-      .filter(a => a.ret > 0)
-      .sort((a, b) => b.ret - a.ret); // Sort by return descending
+    // Max achievable return: concentrate weight on the best asset
+    const bestAssetIdx = meanReturns.indexOf(Math.max(...meanReturns));
+    const maxWeights = meanReturns.map((_, i) =>
+      i === bestAssetIdx ? MAX_WEIGHT : MIN_WEIGHT
+    );
+    const maxAchievableReturn = this.portfolioReturn(
+      this.clampAndNormalize(maxWeights, MIN_WEIGHT, MAX_WEIGHT),
+      returns
+    );
 
-    // Step 2: Start with equal weights
-    let weights = new Array(numAssets).fill(1 / numAssets);
+    // Cap target at 95% of what's actually achievable with these symbols
+    const effectiveTarget = Math.min(targetReturn, maxAchievableReturn * 0.95);
 
-    // Step 3: Iterative gradient-based optimization (200 iterations)
-    const learningRate = 0.01;
+    // Return-weighted initialisation — bias toward high-return assets
+    const positiveReturns = meanReturns.map(r => Math.max(r, 0));
+    const totalPositive = positiveReturns.reduce((s, r) => s + r, 0);
+    let weights = this.clampAndNormalize(
+      totalPositive > 0
+        ? positiveReturns.map(r => r / totalPositive)
+        : new Array(numAssets).fill(1 / numAssets),
+      MIN_WEIGHT,
+      MAX_WEIGHT
+    );
 
-    for (let iter = 0; iter < 200; iter++) {
-      const currentVolatility = this.portfolioVolatility(weights, returns);
+    for (let iter = 0; iter < ITERATIONS; iter++) {
+
+      // Penalty decays from 1.0 → 0.5 as we approach convergence
+      const decayFactor = 1 - (iter / ITERATIONS) * 0.5;
       const covMatrix = this.calculateCovarianceMatrix(returns);
+      const portVol = this.portfolioVolatility(weights, returns);
+      const portReturn = this.portfolioReturn(weights, returns);
+      const shortfall = Math.max(0, effectiveTarget - portReturn);
 
-      // Calculate gradient of volatility with respect to each weight
-      const gradient = new Array(numAssets).fill(0);
+      // Volatility gradient: d(vol)/d(w_i)
+      const volGrad = new Array(numAssets).fill(0);
       for (let i = 0; i < numAssets; i++) {
         for (let j = 0; j < numAssets; j++) {
-          gradient[i] += covMatrix[i][j] * weights[j];
+          volGrad[i] += covMatrix[i][j] * weights[j];
         }
-        gradient[i] = gradient[i] / (currentVolatility + 1e-10);
+        volGrad[i] /= (portVol + 1e-10);
       }
 
-      // Update weights: move in direction that reduces volatility
+      // Return penalty gradient: d(penalty)/d(w_i)
+      const retGrad = meanReturns.map(r =>
+        -2 * RETURN_PENALTY * decayFactor * shortfall * r
+      );
+
+      // Combined update
       for (let i = 0; i < numAssets; i++) {
-        weights[i] -= learningRate * gradient[i];
-        weights[i] = Math.max(0, weights[i]); // No short selling
+        weights[i] -= LEARNING_RATE * (volGrad[i] + retGrad[i]);
       }
 
-      // Normalize weights to sum to 1
-      const total = weights.reduce((s, w) => s + w, 0);
-      weights = weights.map(w => w / total);
-
-      // Check if target return is met
-      const currentReturn = this.portfolioReturn(weights, returns);
-      if (currentReturn < targetReturn) {
-        // Boost weights of high-return assets
-        for (let i = 0; i < numAssets; i++) {
-          if (meanReturns[i] > targetReturn / 12) {
-            weights[i] += learningRate * 0.5;
-          }
-        }
-        // Re-normalize
-        const t = weights.reduce((s, w) => s + w, 0);
-        weights = weights.map(w => w / t);
-      }
-    }
-
-    // Final check: if return still not met, use return-weighted allocation
-    const finalReturn = this.portfolioReturn(weights, returns);
-    if (finalReturn < targetReturn) {
-      // Fallback: weight by positive returns only
-      const positiveReturns = meanReturns.map(r => Math.max(0, r));
-      const totalPositive = positiveReturns.reduce((s, r) => s + r, 0);
-      if (totalPositive > 0) {
-        weights = positiveReturns.map(r => r / totalPositive);
-      } else {
-        weights = new Array(numAssets).fill(1 / numAssets);
-      }
+      weights = this.clampAndNormalize(weights, MIN_WEIGHT, MAX_WEIGHT);
     }
 
     return weights;
+  }
+
+  // Helper used above — extracted for reuse
+  private static clampAndNormalize(
+    weights: number[],
+    minW: number,
+    maxW: number
+  ): number[] {
+    const clamped = weights.map(v => Math.min(Math.max(v, minW), maxW));
+    const total = clamped.reduce((s, v) => s + v, 0);
+    return clamped.map(v => v / total);
   }
 
   private static async fetchStocksBatched(

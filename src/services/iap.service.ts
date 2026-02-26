@@ -7,6 +7,7 @@ import { logger } from '../utils/logger';
 import { UserService } from './user.service';
 import config from '../config';
 import { Plan } from '../constants/enums';
+import * as crypto from 'crypto';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -90,19 +91,74 @@ export class IAPService {
 
   // ── Google Receipt Validation ────────────────────────────────────────────
 
+  // private static async getGoogleAccessToken(): Promise<string> {
+  //   try {
+  //     // Use Google service account to get access token
+  //     const response = await axios.post(
+  //       'https://oauth2.googleapis.com/token',
+  //       {
+  //         grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+  //         assertion: config.GOOGLE_SERVICE_ACCOUNT_KEY,
+  //       }
+  //     );
+  //     return response.data.access_token;
+  //   } catch (error: any) {
+  //     logger.error('Failed to get Google access token', { error: error.message });
+  //     throw ApiError.internal('Failed to authenticate with Google Play');
+  //   }
+  // }
   private static async getGoogleAccessToken(): Promise<string> {
     try {
-      // Use Google service account to get access token
+      // Decode base64 → JSON string → object
+      const decoded = Buffer.from(config.GOOGLE_SERVICE_ACCOUNT_KEY, 'base64').toString('utf-8');
+      const serviceAccount = JSON.parse(decoded) as {
+        client_email: string;
+        private_key: string;
+      };
+
+      console.log(serviceAccount, 'serviceAccount')
+
+      const { client_email, private_key } = serviceAccount;
+
+      if (!client_email) throw new Error('Service account missing client_email');
+      if (!private_key) throw new Error('Service account missing private_key');
+
+      // Build JWT header + payload
+      const now = Math.floor(Date.now() / 1000);
+      const b64Header = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url');
+      const b64Payload = Buffer.from(JSON.stringify({
+        iss: client_email,
+        sub: client_email,
+        aud: 'https://oauth2.googleapis.com/token',
+        scope: 'https://www.googleapis.com/auth/androidpublisher',
+        iat: now,
+        exp: now + 3600,
+      })).toString('base64url');
+
+      // Sign with RSA-SHA256
+      const signingInput = `${b64Header}.${b64Payload}`;
+      const sign = crypto.createSign('RSA-SHA256');
+      sign.update(signingInput);
+      sign.end();
+      const signature = sign.sign(private_key, 'base64url');
+
+      const jwt = `${signingInput}.${signature}`;
+
+      // Exchange JWT for access token
       const response = await axios.post(
         'https://oauth2.googleapis.com/token',
-        {
+        new URLSearchParams({
           grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-          assertion: config.GOOGLE_SERVICE_ACCOUNT_KEY,
-        }
+          assertion: jwt,
+        }),
+        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
       );
+
       return response.data.access_token;
+
     } catch (error: any) {
-      logger.error('Failed to get Google access token', { error: error.message });
+      const detail = error?.response?.data ?? error?.message ?? String(error);
+      logger.error('Failed to get Google access token', { detail });
       throw ApiError.internal('Failed to authenticate with Google Play');
     }
   }

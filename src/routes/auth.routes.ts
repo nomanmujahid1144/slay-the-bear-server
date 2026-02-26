@@ -8,7 +8,7 @@ import {
   forgotPasswordSchema,
   verifyResetTokenSchema,
   changePasswordSchema,
-  refreshTokenSchema,
+  // refreshTokenSchema,
 } from '../validators/auth.validator';
 
 const router = Router();
@@ -60,7 +60,7 @@ router.post('/change-password', validate(changePasswordSchema), AuthController.c
  * @desc    Refresh access token
  * @access  Public
  */
-router.post('/refresh-token', validate(refreshTokenSchema), AuthController.refreshToken);
+router.post('/refresh-token', AuthController.refreshToken);
 
 /**
  * @route   POST /api/auth/logout
