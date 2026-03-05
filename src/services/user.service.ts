@@ -6,6 +6,7 @@ import { logger } from '../utils/logger';
 import { Plan } from '../constants/enums';
 import type { UserResponse } from '../types';
 import type { Location } from '../types/user/location.types';
+import { stripe } from './stripe.service';
 
 export class UserService {
   /**
@@ -138,9 +139,9 @@ export class UserService {
   }
 
   /**
-   * Get User's Latest Subscription
-   * Converts: /api/users/get-user-latest-subscription
-   */
+     * Get User's Latest Subscription
+     * Includes pending downgrade info from Stripe metadata
+     */
   static async getUserSubscription(userId: string): Promise<any> {
     try {
       logger.info(`Getting subscription for user: ${userId}`);
@@ -155,9 +156,53 @@ export class UserService {
         throw ApiError.notFound('No subscription found');
       }
 
+      const subscription = userSubscription[0];
+
+      // ── Check Stripe for pending downgrade metadata ───────────────────
+      let pendingDowngrade = null;
+      let cancelAtPeriodEnd = false;
+
+      try {
+        const user = await db
+          .select()
+          .from(users)
+          .where(eq(users.id, userId))
+          .limit(1);
+
+        if (user.length > 0 && user[0].customerId) {
+          const stripeSubscriptions = await stripe.subscriptions.list({
+            customer: user[0].customerId,
+            status: 'active',
+            limit: 1,
+          });
+
+          if (stripeSubscriptions.data.length > 0) {
+            const stripeSub = stripeSubscriptions.data[0];
+            if (stripeSub.metadata?.pending_downgrade === 'true') {
+              pendingDowngrade = {
+                plan: stripeSub.metadata.pending_plan,
+                period: stripeSub.metadata.pending_period,
+                effectiveDate: subscription.endDate,
+              };
+            }
+            cancelAtPeriodEnd = (stripeSub as any).cancel_at_period_end === true;
+          }
+        }
+      } catch (stripeError: any) {
+        // Don't fail the whole request if Stripe check fails
+        logger.warn('Could not fetch Stripe metadata for pending downgrade', {
+          userId,
+          error: stripeError.message,
+        });
+      }
+
       logger.info(`Subscription found for user: ${userId}`);
 
-      return userSubscription[0];
+      return {
+        ...subscription,
+        pendingDowngrade,
+        cancelAtPeriodEnd,
+      };
     } catch (error: any) {
       logger.error('Get subscription error', { error: error.message, userId });
       throw error instanceof ApiError ? error : ApiError.internal(error.message);

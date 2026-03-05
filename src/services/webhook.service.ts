@@ -110,30 +110,20 @@ export class WebhookService {
   ): Promise<void> {
     logger.info('Processing checkout.session.completed', { sessionId: session.id });
 
-    // Expand session to get line items and invoice
     const expandedSession = await stripe.checkout.sessions.retrieve(session.id, {
       expand: ['line_items', 'invoice'],
     });
 
     const customerEmail = expandedSession.customer_details?.email;
+    if (!customerEmail) throw new Error('Customer email not found in session');
 
-    if (!customerEmail) {
-      throw new Error('Customer email not found in session');
-    }
-
-    // Find user by email
     const user = await UserService.getUserByEmail(customerEmail);
+    if (!user) throw new Error(`User not found for email: ${customerEmail}`);
 
-    if (!user) {
-      throw new Error(`User not found for email: ${customerEmail}`);
-    }
-
-    // Update customer ID if not already set
     if (!user.customerId && expandedSession.customer) {
       await UserService.updateCustomerId(user.id, expandedSession.customer as string);
     }
 
-    // Process subscription
     const lineItems = expandedSession.line_items?.data || [];
 
     for (const item of lineItems) {
@@ -141,22 +131,43 @@ export class WebhookService {
       const isSubscription = item.price?.type === 'recurring';
 
       if (isSubscription && priceId) {
-        // Determine plan and period from priceId — not hardcoded
         const plan = this.getPlanFromPriceId(priceId);
         const period = this.getPeriodFromPriceId(priceId);
 
-        let endDate = new Date();
+        // Calculate fallback dates (used only if subscription object has no periods yet)
+        const now = new Date();
+        const fallbackEnd = new Date(now);
         if (period === 'yearly') {
-          endDate.setFullYear(endDate.getFullYear() + 1);
+          fallbackEnd.setFullYear(fallbackEnd.getFullYear() + 1);
         } else {
-          endDate.setMonth(endDate.getMonth() + 1);
+          fallbackEnd.setMonth(fallbackEnd.getMonth() + 1);
         }
 
-        // Get invoice details
-        const invoice = expandedSession.invoice as Stripe.Invoice;
+        // Try to get real dates from the Stripe subscription
+        let startDate = now;
+        let endDate = fallbackEnd;
 
-        // Create or update subscription record
-        const existingSubscription = await db
+        if (expandedSession.subscription) {
+          try {
+            const stripeSub = await stripe.subscriptions.retrieve(
+              expandedSession.subscription as string
+            );
+            const ps = (stripeSub as any).current_period_start;
+            const pe = (stripeSub as any).current_period_end;
+            if (ps && pe && !isNaN(ps) && !isNaN(pe)) {
+              startDate = new Date(ps * 1000);
+              endDate = new Date(pe * 1000);
+            }
+          } catch (e) {
+            logger.warn('Could not retrieve subscription for dates, using fallback', { e });
+          }
+        }
+
+        const invoice = expandedSession.invoice as Stripe.Invoice;
+        const invoiceNumber = (invoice as any)?.number || 'N/A';
+
+        // Upsert subscription record
+        const existing = await db
           .select()
           .from(subscriptions)
           .where(eq(subscriptions.userId, user.id))
@@ -164,59 +175,39 @@ export class WebhookService {
 
         let subscriptionId: string;
 
-        if (existingSubscription.length > 0) {
-          // Update existing subscription
+        if (existing.length > 0) {
           await db
             .update(subscriptions)
-            .set({
-              plan: plan,
-              period: period,
-              startDate: new Date(),
-              endDate: endDate,
-              updatedAt: new Date(),
-            })
+            .set({ plan, period, startDate, endDate, updatedAt: new Date() })
             .where(eq(subscriptions.userId, user.id));
-
-          subscriptionId = existingSubscription[0].id;
+          subscriptionId = existing[0].id;
         } else {
-          // Create new subscription
-          const [newSubscription] = await db
+          const [newSub] = await db
             .insert(subscriptions)
-            .values({
-              userId: user.id,
-              plan: plan,
-              period: period,
-              startDate: new Date(),
-              endDate: endDate,
-            })
+            .values({ userId: user.id, plan, period, startDate, endDate })
             .returning();
-
-          subscriptionId = newSubscription.id;
+          subscriptionId = newSub.id;
         }
 
-        // Add subscription entry (invoice record)
+        // Insert the initial invoice entry
         await db.insert(subscriptionEntries).values({
-          subscriptionId: subscriptionId,
-          invoiceId: invoice.number || 'N/A',
+          subscriptionId,
+          invoiceId: invoiceNumber,
           amount: ((item.price?.unit_amount || 0) / 100).toString(),
           status: 'Subscribed',
-          startDate: new Date(),
-          endDate: endDate,
-          viewURL: invoice.hosted_invoice_url || null,
-          downloadURL: invoice.invoice_pdf || null,
+          startDate,
+          endDate,
+          viewURL: (invoice as any)?.hosted_invoice_url || null,
+          downloadURL: (invoice as any)?.invoice_pdf || null,
         });
 
-        // Update user plan
         await UserService.updateUserPlan(user.id, plan);
 
-        logger.info('Subscription created successfully', {
-          userId: user.id,
-          plan,
-          period,
-        });
+        logger.info('Subscription created successfully', { userId: user.id, plan, period, startDate, endDate });
       }
     }
   }
+
 
   /**
    * Handle: customer.subscription.created
@@ -224,18 +215,115 @@ export class WebhookService {
   private static async handleSubscriptionCreated(
     subscription: Stripe.Subscription
   ): Promise<void> {
-    logger.info('Processing subscription.created', {
-      subscriptionId: subscription.id,
-    });
+    logger.info('Processing subscription.created', { subscriptionId: subscription.id });
 
-    // Already handled in checkout.session.completed
-    // This is a backup/confirmation event
+    const customerId = subscription.customer as string;
+    const periodStart = (subscription as any).current_period_start;
+    const periodEnd = (subscription as any).current_period_end;
+
+    if (!periodStart || !periodEnd) {
+      logger.warn('subscription.created: no period dates available, skipping date update');
+      return;
+    }
+
+    const startDate = new Date(periodStart * 1000);
+    const endDate = new Date(periodEnd * 1000);
+
+    // Find user by customer ID
+    const userRows = await db
+      .select()
+      .from(users)
+      .where(eq(users.customerId, customerId))
+      .limit(1);
+
+    if (userRows.length === 0) {
+      logger.warn(`subscription.created: no user found for customer ${customerId}`);
+      return;
+    }
+
+    const userId = userRows[0].id;
+
+    // Update both the subscription record AND the latest entry with real dates
+    const userSub = await db
+      .select()
+      .from(subscriptions)
+      .where(eq(subscriptions.userId, userId))
+      .limit(1);
+
+    if (userSub.length === 0) {
+      logger.warn(`subscription.created: no subscription record for user ${userId}`);
+      return;
+    }
+
+    const subscriptionId = userSub[0].id;
+
+    await db
+      .update(subscriptions)
+      .set({ startDate, endDate, updatedAt: new Date() })
+      .where(eq(subscriptions.id, subscriptionId));
+
+    // Also update the most recently inserted entry (the Subscribed one)
+    await db
+      .update(subscriptionEntries)
+      .set({ startDate, endDate, updatedAt: new Date() })
+      .where(eq(subscriptionEntries.subscriptionId, subscriptionId));
+
+    logger.info('Subscription dates corrected from subscription.created', { userId, startDate, endDate });
   }
 
   /**
    * Handle: customer.subscription.updated
    * Triggered when subscription is modified (e.g., plan change, renewal)
    */
+  // private static async handleSubscriptionUpdated(
+  //   subscription: Stripe.Subscription
+  // ): Promise<void> {
+  //   logger.info('Processing subscription.updated', {
+  //     subscriptionId: subscription.id,
+  //     status: subscription.status,
+  //   });
+
+  //   const customerId = subscription.customer as string;
+
+  //   // Find user by customer ID
+  //   const user = await db
+  //     .select()
+  //     .from(users)
+  //     .where(eq(users.customerId, customerId))
+  //     .limit(1);
+
+  //   if (user.length === 0) {
+  //     throw new Error(`User not found for customer: ${customerId}`);
+  //   }
+
+  //   const userId = user[0].id;
+
+  //   // Handle renewal or reactivation
+  //   if (subscription.status === 'active') {
+  //     const priceId = subscription.items.data[0].price.id;
+
+  //     // Determine plan and period from priceId — not hardcoded
+  //     const plan = this.getPlanFromPriceId(priceId);
+  //     const period = this.getPeriodFromPriceId(priceId);
+  //     const endDate = new Date((subscription as any).current_period_end * 1000);
+
+  //     // Update subscription
+  //     await db
+  //       .update(subscriptions)
+  //       .set({
+  //         plan: plan,
+  //         period: period,
+  //         endDate: endDate,
+  //         updatedAt: new Date(),
+  //       })
+  //       .where(eq(subscriptions.userId, userId));
+
+  //     // Update user plan
+  //     await UserService.updateUserPlan(userId, plan);
+
+  //     logger.info('Subscription updated to active', { userId, plan, period });
+  //   }
+  // }
   private static async handleSubscriptionUpdated(
     subscription: Stripe.Subscription
   ): Promise<void> {
@@ -246,43 +334,40 @@ export class WebhookService {
 
     const customerId = subscription.customer as string;
 
-    // Find user by customer ID
-    const user = await db
+    const userRows = await db
       .select()
       .from(users)
       .where(eq(users.customerId, customerId))
       .limit(1);
 
-    if (user.length === 0) {
+    if (userRows.length === 0) {
       throw new Error(`User not found for customer: ${customerId}`);
     }
 
-    const userId = user[0].id;
+    const userId = userRows[0].id;
 
-    // Handle renewal or reactivation
     if (subscription.status === 'active') {
-      const priceId = subscription.items.data[0].price.id;
+      const isPendingDowngrade = subscription.metadata?.pending_downgrade === 'true';
 
-      // Determine plan and period from priceId — not hardcoded
+      if (isPendingDowngrade) {
+        logger.info('Pending downgrade detected — DB unchanged until next renewal', { userId });
+        return;
+      }
+
+      // Immediate change (upgrade or reactivation) — update DB now
+      const priceId = subscription.items.data[0].price.id;
       const plan = this.getPlanFromPriceId(priceId);
       const period = this.getPeriodFromPriceId(priceId);
       const endDate = new Date((subscription as any).current_period_end * 1000);
 
-      // Update subscription
       await db
         .update(subscriptions)
-        .set({
-          plan: plan,
-          period: period,
-          endDate: endDate,
-          updatedAt: new Date(),
-        })
+        .set({ plan, period, endDate, updatedAt: new Date() })
         .where(eq(subscriptions.userId, userId));
 
-      // Update user plan
       await UserService.updateUserPlan(userId, plan);
 
-      logger.info('Subscription updated to active', { userId, plan, period });
+      logger.info('Subscription updated to active', { userId, plan, period, endDate });
     }
   }
 
@@ -358,76 +443,174 @@ export class WebhookService {
   }
 
   /**
-   * Handle: invoice.payment_succeeded
-   * Triggered on successful recurring payment
-   */
+     * Handle: invoice.payment_succeeded
+     *
+     * billing_reason cases:
+     * - subscription_create  → skip (handled by checkout.session.completed)
+     * - subscription_update  → proration from immediate upgrade (always_invoice)
+     * - subscription_cycle   → normal renewal (also applies pending downgrade if any)
+     */
   private static async handleInvoicePaymentSucceeded(
     invoice: Stripe.Invoice
   ): Promise<void> {
-    logger.info('Processing invoice.payment_succeeded', {
-      invoiceId: invoice.id,
+    logger.info('Processing invoice.payment_succeeded', { invoiceId: invoice.id });
+
+    const billingReason = (invoice as any).billing_reason;
+
+    // ── Skip initial charge — handled by checkout.session.completed ──────
+    if (billingReason === 'subscription_create') {
+      logger.info('Skipping invoice.payment_succeeded for initial subscription payment');
+      return;
+    }
+
+    if (!(invoice as any).subscription) return;
+
+    const subscription = await stripe.subscriptions.retrieve(
+      (invoice as any).subscription as string
+    );
+
+    const customerId = subscription.customer as string;
+
+    const userRows = await db
+      .select()
+      .from(users)
+      .where(eq(users.customerId, customerId))
+      .limit(1);
+
+    if (userRows.length === 0) throw new Error(`User not found for customer: ${customerId}`);
+
+    const userId = userRows[0].id;
+
+    const userSubscription = await db
+      .select()
+      .from(subscriptions)
+      .where(eq(subscriptions.userId, userId))
+      .limit(1);
+
+    if (userSubscription.length === 0) return;
+
+    const subscriptionId = userSubscription[0].id;
+
+    // ── Proration invoice from immediate upgrade (always_invoice) ────────
+    if (billingReason === 'subscription_update') {
+      logger.info('Processing proration invoice from plan upgrade', { invoiceId: invoice.id, userId });
+
+      // Get dates from invoice line items — more reliable than subscription for proration
+      const invoiceLines = (invoice as any).lines?.data;
+      let prorationStart = (invoice as any).period_start;
+      let prorationEnd = (invoice as any).period_end;
+
+      if (invoiceLines && invoiceLines.length > 0) {
+        // Find the positive proration line (the new plan charge)
+        const chargeLine = invoiceLines.find((l: any) => l.amount > 0 && l.period);
+        if (chargeLine?.period?.start && chargeLine?.period?.end) {
+          prorationStart = chargeLine.period.start;
+          prorationEnd = chargeLine.period.end;
+        }
+      }
+
+      if (!prorationStart || !prorationEnd) {
+        logger.warn('Proration invoice missing period dates, skipping', { invoiceId: invoice.id });
+        return;
+      }
+
+      const startDate = new Date(prorationStart * 1000);
+      const endDate = new Date(prorationEnd * 1000);
+
+      await db.insert(subscriptionEntries).values({
+        subscriptionId,
+        invoiceId: (invoice as any).number || 'N/A',
+        amount: (((invoice as any).amount_paid || 0) / 100).toString(),
+        status: 'Renewal',
+        startDate,
+        endDate,
+        viewURL: (invoice as any).hosted_invoice_url || null,
+        downloadURL: (invoice as any).invoice_pdf || null,
+      });
+
+      logger.info('Proration invoice entry added', { userId, amount: (invoice as any).amount_paid });
+      return;
+    }
+
+    // ── Renewal (subscription_cycle) ─────────────────────────────────────
+    const periodStart = (subscription as any).current_period_start;
+    const periodEnd = (subscription as any).current_period_end;
+
+    if (!periodStart || !periodEnd) {
+      logger.warn('Renewal invoice missing period dates, skipping', { invoiceId: invoice.id });
+      return;
+    }
+
+    const startDate = new Date(periodStart * 1000);
+    const endDate = new Date(periodEnd * 1000);
+
+    // Check for pending downgrade — apply it now at renewal
+    const isPendingDowngrade = subscription.metadata?.pending_downgrade === 'true';
+    const pendingPriceId = subscription.metadata?.pending_price_id;
+    const pendingPlan = subscription.metadata?.pending_plan;
+    const pendingPeriod = subscription.metadata?.pending_period;
+
+    if (isPendingDowngrade && pendingPriceId && pendingPlan && pendingPeriod) {
+      logger.info('Applying pending downgrade at renewal', { userId, pendingPlan, pendingPeriod });
+
+      // Swap to the new lower price on Stripe + clear metadata
+      await stripe.subscriptions.update(subscription.id, {
+        items: [{ id: subscription.items.data[0].id, price: pendingPriceId }],
+        proration_behavior: 'none',
+        metadata: {
+          pending_downgrade: '',
+          pending_plan: '',
+          pending_period: '',
+          pending_price_id: '',
+        },
+      });
+
+      await db.insert(subscriptionEntries).values({
+        subscriptionId,
+        invoiceId: (invoice as any).number || 'N/A',
+        amount: (((invoice as any).amount_paid || 0) / 100).toString(),
+        status: 'Renewal',
+        startDate,
+        endDate,
+        viewURL: (invoice as any).hosted_invoice_url || null,
+        downloadURL: (invoice as any).invoice_pdf || null,
+      });
+
+      await db
+        .update(subscriptions)
+        .set({ plan: pendingPlan as any, period: pendingPeriod as any, endDate, updatedAt: new Date() })
+        .where(eq(subscriptions.id, subscriptionId));
+
+      await UserService.updateUserPlan(userId, pendingPlan as any);
+
+      logger.info('Downgrade applied successfully at renewal', { userId, plan: pendingPlan, period: pendingPeriod });
+      return;
+    }
+
+    // ── Normal renewal — update dates + insert billing entry ─────────────
+    const priceId = subscription.items.data[0].price.id;
+    const plan = this.getPlanFromPriceId(priceId);
+    const period = this.getPeriodFromPriceId(priceId);
+
+    await db.insert(subscriptionEntries).values({
+      subscriptionId,
+      invoiceId: (invoice as any).number || 'N/A',
+      amount: (((invoice as any).amount_paid || 0) / 100).toString(),
+      status: 'Renewal',
+      startDate,
+      endDate,
+      viewURL: (invoice as any).hosted_invoice_url || null,
+      downloadURL: (invoice as any).invoice_pdf || null,
     });
 
-    // If this is a subscription renewal, add new invoice entry
-    if ((invoice as any).subscription) {
-      const subscription = await stripe.subscriptions.retrieve(
-        (invoice as any).subscription as string
-      );
+    await db
+      .update(subscriptions)
+      .set({ plan, period, endDate, updatedAt: new Date() })
+      .where(eq(subscriptions.id, subscriptionId));
 
-      const customerId = subscription.customer as string;
-
-      // Find user
-      const user = await db
-        .select()
-        .from(users)
-        .where(eq(users.customerId, customerId))
-        .limit(1);
-
-      if (user.length === 0) {
-        throw new Error(`User not found for customer: ${customerId}`);
-      }
-
-      const userId = user[0].id;
-
-      // Get user's subscription
-      const userSubscription = await db
-        .select()
-        .from(subscriptions)
-        .where(eq(subscriptions.userId, userId))
-        .limit(1);
-
-      if (userSubscription.length > 0) {
-        const subscriptionId = userSubscription[0].id;
-        const periodStart = (subscription as any).current_period_start;
-        const periodEnd = (subscription as any).current_period_end;
-        const endDate = periodEnd ? new Date(periodEnd * 1000) : new Date();
-        const startDate = periodStart ? new Date(periodStart * 1000) : new Date();
-
-        // Add new invoice entry for renewal
-        await db.insert(subscriptionEntries).values({
-          subscriptionId: subscriptionId,
-          invoiceId: (invoice as any).number || 'N/A',
-          amount: (((invoice as any).amount_paid || 0) / 100).toString(),
-          status: 'Renewal',
-          startDate: startDate,
-          endDate: endDate,
-          viewURL: (invoice as any).hosted_invoice_url || null,
-          downloadURL: (invoice as any).invoice_pdf || null,
-        });
-
-        // Update subscription end date
-        await db
-          .update(subscriptions)
-          .set({
-            endDate: endDate,
-            updatedAt: new Date(),
-          })
-          .where(eq(subscriptions.id, subscriptionId));
-
-        logger.info('Subscription renewed successfully', { userId });
-      }
-    }
+    logger.info('Subscription renewed successfully', { userId, plan, period, endDate });
   }
+
 
   /**
    * Handle: invoice.payment_failed

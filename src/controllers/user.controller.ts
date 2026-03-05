@@ -156,6 +156,8 @@ export class UserController {
 
       const subscription = await UserService.getUserSubscription(userId);
 
+      console.log(subscription, 'subscription')
+
       return ApiResponseUtil.success(
         res,
         subscription,
