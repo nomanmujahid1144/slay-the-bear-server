@@ -46,6 +46,10 @@ interface Config {
     APPLE_PRODUCTION_URL: string;
     GOOGLE_SERVICE_ACCOUNT_KEY: string;
 
+    // Tradier
+    TRADIER_ACCESS_TOKEN: string;
+    TRADIER_ACCOUNT_NUMBER: string;
+    TRADIER_API_URL: string;
 
     // Frontend
     FRONTEND_URL: string;
@@ -96,6 +100,11 @@ const config: Config = {
     APPLE_SANDBOX_URL: process.env.APPLE_SANDBOX_URL || 'https://sandbox.itunes.apple.com/verifyReceipt',
     APPLE_PRODUCTION_URL: process.env.APPLE_PRODUCTION_URL || 'https://buy.itunes.apple.com/verifyReceipt',
     GOOGLE_SERVICE_ACCOUNT_KEY: process.env.GOOGLE_SERVICE_ACCOUNT_KEY || '',
+
+    // Tradier
+    TRADIER_ACCESS_TOKEN: process.env.TRADIER_ACCESS_TOKEN || '',
+    TRADIER_ACCOUNT_NUMBER: process.env.TRADIER_ACCOUNT_NUMBER || '',
+    TRADIER_API_URL: process.env.TRADIER_API_URL || 'https://sandbox.tradier.com/v1',
 
     // Frontend
     FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:3000',
