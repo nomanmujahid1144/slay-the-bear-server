@@ -177,15 +177,19 @@ export class WebSocketService {
      */
     private async createTradierSession(): Promise<TradierSession | null> {
         try {
-
-            const sessionUrl = `${config.TRADIER_API_URL}/markets/events/session`;
-
+            // Always use PRODUCTION for streaming (even if using sandbox for other APIs)
+            // This is required because sandbox doesn't support market data streaming
+            const sessionUrl = 'https://api.tradier.com/v1/markets/events/session';
+            
+            // Use streaming token (falls back to regular token if not set)
+            const streamingToken = (config as any).TRADIER_STREAMING_TOKEN || config.TRADIER_ACCESS_TOKEN;
+            
             const response = await axios.post(
                 sessionUrl,
                 {},
                 {
                     headers: {
-                        'Authorization': `Bearer ${config.TRADIER_ACCESS_TOKEN}`,
+                        'Authorization': `Bearer ${streamingToken}`,
                         'Accept': 'application/json'
                     }
                 }
@@ -246,26 +250,30 @@ export class WebSocketService {
 
         // Connect to Tradier WebSocket
         try {
-            // Use sandbox WebSocket for sandbox accounts
-            const wsUrl = config.TRADIER_API_URL.includes('sandbox')
-                ? 'wss://sandbox-ws.tradier.com/v1/markets/events'
-                : 'wss://ws.tradier.com/v1/markets/events';
+            // Always use production WebSocket for market data streaming
+            // Sandbox streaming is not available for market data
+            const wsUrl = 'wss://ws.tradier.com/v1/markets/events';
 
             this.tradierWs = new WSClient(wsUrl);
 
             this.tradierWs.on('open', () => {
                 logger.info('📡 Connected to Tradier WebSocket');
 
-                // Send subscription payload
-                const payload = {
-                    symbols: symbols,
-                    sessionid: this.currentSessionId,
-                    filter: ['trade', 'quote'],
-                    linebreak: true
-                };
+                // IMPORTANT: Wait a moment for WebSocket to be fully ready
+                setTimeout(() => {
+                    if (this.tradierWs && this.tradierWs.readyState === WSClient.OPEN) {
+                        // Send subscription payload
+                        const payload = {
+                            symbols: symbols,
+                            sessionid: this.currentSessionId,
+                            filter: ['trade', 'quote'],
+                            linebreak: true
+                        };
 
-                this.tradierWs!.send(JSON.stringify(payload));
-                logger.info(`📊 Subscribed to ${symbols.length} symbols via Tradier WebSocket`);
+                        this.tradierWs.send(JSON.stringify(payload));
+                        logger.info(`📊 Subscribed to ${symbols.length} symbols via Tradier WebSocket`);
+                    }
+                }, 100); // Wait 100ms for WebSocket to be fully ready
             });
 
             this.tradierWs.on('message', (data: string) => {

@@ -1,7 +1,7 @@
 // test-production-session.js
 const axios = require('axios');
 
-const TOKEN = 'a29kZHV4MDhMRW0zZVNHcXkwYW1HanhrVG1LbEhkN0s6a1VYUWloSWhxM1ZCdVhWdQ==';
+const TOKEN = 'ZNROE3XoPWGbMYck57W1GAe2VTg9';
 
 async function testProductionStreaming() {
     console.log('🧪 Testing PRODUCTION streaming with sandbox token...\n');

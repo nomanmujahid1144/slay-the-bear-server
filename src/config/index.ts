@@ -51,6 +51,10 @@ interface Config {
     TRADIER_ACCOUNT_NUMBER: string;
     TRADIER_API_URL: string;
 
+    // Tradier Streaming
+    TRADIER_STREAMING_TOKEN: string;
+    TRADIER_STREAMING_ACCOUNT: string;
+
     // Frontend
     FRONTEND_URL: string;
 
@@ -105,6 +109,10 @@ const config: Config = {
     TRADIER_ACCESS_TOKEN: process.env.TRADIER_ACCESS_TOKEN || '',
     TRADIER_ACCOUNT_NUMBER: process.env.TRADIER_ACCOUNT_NUMBER || '',
     TRADIER_API_URL: process.env.TRADIER_API_URL || 'https://sandbox.tradier.com/v1',
+
+    // Tradier Streaming
+    TRADIER_STREAMING_TOKEN: process.env.TRADIER_STREAMING_TOKEN || process.env.TRADIER_ACCESS_TOKEN || '',
+    TRADIER_STREAMING_ACCOUNT: process.env.TRADIER_STREAMING_ACCOUNT || process.env.TRADIER_ACCOUNT_NUMBER || '',
 
     // Frontend
     FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:3000',
