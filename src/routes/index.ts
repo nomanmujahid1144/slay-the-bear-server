@@ -7,6 +7,7 @@ import legalRoutes from './legal.routes';
 import iap from './iap.routes';
 import marketsRoutes from './markets.routes';
 import newsRoutes from './news.routes';
+import marketsAvRoutes from './markets-av.routes';
 
 const router = Router();
 
@@ -31,6 +32,7 @@ router.use('/calculators', calculatorRoutes);
 router.use('/legal', legalRoutes);
 router.use('/iap', iap);
 router.use('/markets', marketsRoutes);
+router.use('/markets', marketsAvRoutes);
 router.use('/news', newsRoutes);
 // router.use('/webhooks', webhookRoutes);
 
