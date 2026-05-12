@@ -468,7 +468,7 @@ export class CalculatorController {
     static async getCalculatorHistoryById(req: AuthRequest, res: Response, next: NextFunction) {
         try {
             const userId = req.user?.id;
-            const { historyId } = req.params;
+            const historyId = req.params.historyId as string;
 
             if (!userId) {
                 throw new Error('User ID not found in request');
@@ -495,7 +495,7 @@ export class CalculatorController {
     static async deleteCalculatorHistory(req: AuthRequest, res: Response, next: NextFunction) {
         try {
             const userId = req.user?.id;
-            const { historyId } = req.params;
+            const historyId = req.params.historyId as string;
 
             if (!userId) {
                 throw new Error('User ID not found in request');

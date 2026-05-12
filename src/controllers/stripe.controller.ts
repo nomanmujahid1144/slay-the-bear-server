@@ -61,7 +61,7 @@ export class StripeController {
     next: NextFunction
   ) {
     try {
-      const { sessionId } = req.params;
+      const sessionId = req.params.sessionId as string;
 
       logger.info(`Session details request: ${sessionId}`);
 

@@ -1,5 +1,4 @@
 import dotenv from 'dotenv';
-import path from 'path';
 
 // Load environment variables
 dotenv.config();
@@ -27,13 +26,11 @@ interface Config {
     RESEND_SENDER_EMAIL: string;
     RESEND_SENDER_NAME: string;
 
-    // Add Stripe config
+    // Stripe
     STRIPE_SECRET_KEY: string,
     STRIPE_WEBHOOK_SECRET: string,
-    // Add Stripe Premium Keys
     STRIPE_PREMIUM_MONTHLY_PRICE_ID: string,
     STRIPE_PREMIUM_YEARLY_PRICE_ID: string,
-    // Add Stripe Basic Keys
     STRIPE_BASIC_MONTHLY_PRICE_ID: string,
     STRIPE_BASIC_YEARLY_PRICE_ID: string,
 
@@ -46,14 +43,28 @@ interface Config {
     APPLE_PRODUCTION_URL: string;
     GOOGLE_SERVICE_ACCOUNT_KEY: string;
 
-    // Tradier
+    // Tradier — Market Data
     TRADIER_ACCESS_TOKEN: string;
     TRADIER_ACCOUNT_NUMBER: string;
     TRADIER_API_URL: string;
 
-    // Tradier Streaming
+    // Tradier — WebSocket Streaming
     TRADIER_STREAMING_TOKEN: string;
     TRADIER_STREAMING_ACCOUNT: string;
+
+    // Tradier — Trading (OAuth)
+    TRADIER_CLIENT_ID: string;
+    TRADIER_CLIENT_SECRET: string;
+    TRADIER_CALLBACK_URL: string;
+    TRADIER_BASIC_AUTH: string;
+    TRADIER_SANDBOX_URL: string;
+
+    // Finnhub
+    FINNHUB_API_KEY: string;
+
+    // Redis (Upstash)
+    UPSTASH_REDIS_REST_URL: string;
+    UPSTASH_REDIS_REST_TOKEN: string;
 
     // Frontend
     FRONTEND_URL: string;
@@ -85,18 +96,15 @@ const config: Config = {
     RESEND_SENDER_EMAIL: process.env.RESEND_SENDER_EMAIL || '',
     RESEND_SENDER_NAME: process.env.RESEND_SENDER_NAME || 'Slay The Bear',
 
-
-    // Add Stripe config
+    // Stripe
     STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY || '',
     STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET || '',
-    // Add Stripe Premium Keys
     STRIPE_PREMIUM_MONTHLY_PRICE_ID: process.env.STRIPE_PREMIUM_MONTHLY_PRICE_ID || '',
     STRIPE_PREMIUM_YEARLY_PRICE_ID: process.env.STRIPE_PREMIUM_YEARLY_PRICE_ID || '',
-    // Add Stripe Basic Keys
     STRIPE_BASIC_MONTHLY_PRICE_ID: process.env.STRIPE_BASIC_MONTHLY_PRICE_ID || '',
     STRIPE_BASIC_YEARLY_PRICE_ID: process.env.STRIPE_BASIC_YEARLY_PRICE_ID || '',
 
-
+    // Alpha Vantage
     ALPHA_VANTAGE_API_KEY: process.env.ALPHA_VANTAGE_API_KEY || '',
 
     // IAP (In-App Purchase)
@@ -105,14 +113,28 @@ const config: Config = {
     APPLE_PRODUCTION_URL: process.env.APPLE_PRODUCTION_URL || 'https://buy.itunes.apple.com/verifyReceipt',
     GOOGLE_SERVICE_ACCOUNT_KEY: process.env.GOOGLE_SERVICE_ACCOUNT_KEY || '',
 
-    // Tradier
+    // Tradier — Market Data
     TRADIER_ACCESS_TOKEN: process.env.TRADIER_ACCESS_TOKEN || '',
     TRADIER_ACCOUNT_NUMBER: process.env.TRADIER_ACCOUNT_NUMBER || '',
-    TRADIER_API_URL: process.env.TRADIER_API_URL || 'https://sandbox.tradier.com/v1',
+    TRADIER_API_URL: process.env.TRADIER_API_URL || 'https://api.tradier.com/v1',
 
-    // Tradier Streaming
+    // Tradier — WebSocket Streaming
     TRADIER_STREAMING_TOKEN: process.env.TRADIER_STREAMING_TOKEN || process.env.TRADIER_ACCESS_TOKEN || '',
     TRADIER_STREAMING_ACCOUNT: process.env.TRADIER_STREAMING_ACCOUNT || process.env.TRADIER_ACCOUNT_NUMBER || '',
+
+    // Tradier — Trading (OAuth)
+    TRADIER_CLIENT_ID: process.env.TRADIER_CLIENT_ID || '',
+    TRADIER_CLIENT_SECRET: process.env.TRADIER_CLIENT_SECRET || '',
+    TRADIER_CALLBACK_URL: process.env.TRADIER_CALLBACK_URL || 'http://localhost:5000/api/trading/auth/callback',
+    TRADIER_BASIC_AUTH: process.env.TRADIER_BASIC_AUTH || '',
+    TRADIER_SANDBOX_URL: process.env.TRADIER_SANDBOX_URL || 'https://sandbox.tradier.com/v1',
+
+    // Finnhub
+    FINNHUB_API_KEY: process.env.FINNHUB_API_KEY || '',
+
+    // Redis (Upstash)
+    UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL || '',
+    UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN || '',
 
     // Frontend
     FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:3000',
@@ -126,6 +148,9 @@ const requiredEnvVars = [
     'DATABASE_URL',
     'JWT_ACCESS_SECRET',
     'JWT_REFRESH_SECRET',
+    'TRADIER_CLIENT_ID',
+    'TRADIER_CLIENT_SECRET',
+    'TRADIER_BASIC_AUTH',
 ];
 
 const missingEnvVars = requiredEnvVars.filter((envVar) => !process.env[envVar]);
