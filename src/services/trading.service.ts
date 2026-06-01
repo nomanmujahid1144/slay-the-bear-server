@@ -33,9 +33,9 @@ export class TradingService {
     // Creates an axios instance with user's token
     // ============================================
 
-    private static getClient(accessToken: string): AxiosInstance {
+    private static getClient(accessToken: string, baseURL?: string): AxiosInstance {
         return axios.create({
-            baseURL: config.TRADIER_SANDBOX_URL,
+            baseURL: baseURL || config.TRADIER_SANDBOX_URL,
             timeout: 15000,
             headers: {
                 'Authorization': `Bearer ${accessToken}`,
@@ -141,10 +141,12 @@ export class TradingService {
      */
     static getAuthorizationUrl(userId: string): string {
         const params = new URLSearchParams({
-            client_id: config.TRADIER_CLIENT_ID,
-            scope: 'read write trade',
             response_type: 'code',
-            state: userId,  // ← pass userId as state
+            redirect_uri: config.TRADIER_CALLBACK_URL,
+            client_id: config.TRADIER_CLIENT_ID,
+            scope: 'read,write,trade',
+            type: 'web_server',
+            state: userId,
         });
 
         const url = `https://api.tradier.com/v1/oauth/authorize?${params.toString()}`;
@@ -166,7 +168,7 @@ export class TradingService {
                 new URLSearchParams({
                     grant_type: 'authorization_code',
                     code,
-                    redirect_uri: config.TRADIER_CALLBACK_URL,
+                    // redirect_uri: config.TRADIER_CALLBACK_URL,
                 }),
                 {
                     headers: {
@@ -190,8 +192,18 @@ export class TradingService {
      */
     static async fetchTradierProfile(accessToken: string): Promise<TradierRawProfile> {
         try {
-            const client = this.getClient(accessToken);
-            const response = await client.get<TradierRawProfile>('/user/profile');
+            // const client = this.getClient(accessToken);
+            // const response = await client.get<TradierRawProfile>('/user/profile');
+            const response = await axios.get<TradierRawProfile>(
+                'https://api.tradier.com/v1/user/profile',
+                {
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`,
+                        'Accept': 'application/json',
+                    },
+                }
+            );
+
             return response.data;
         } catch (error: any) {
             logger.error('Fetch Tradier profile error:', error.message);
@@ -368,7 +380,10 @@ export class TradingService {
             logger.info(`Getting Tradier profile for user: ${userId}`);
 
             const account = await this.getUserTradierAccount(userId);
-            const client = this.getClient(account.accessToken);
+            const client = this.getClient(
+                account.accessToken,
+                'https://api.tradier.com/v1'
+            );
 
             const response = await client.get<TradierRawProfile>('/user/profile');
             const profile = response.data.profile;
@@ -398,7 +413,10 @@ export class TradingService {
             logger.info(`Getting Tradier balances for user: ${userId}`);
 
             const account = await this.getUserTradierAccount(userId);
-            const client = this.getClient(account.accessToken);
+            const client = this.getClient(
+                account.accessToken,
+                'https://api.tradier.com/v1'
+            );
 
             const response = await client.get<TradierRawBalances>(
                 `/accounts/${account.accountNumber}/balances`
@@ -436,7 +454,10 @@ export class TradingService {
             logger.info(`Getting Tradier positions for user: ${userId}`);
 
             const account = await this.getUserTradierAccount(userId);
-            const client = this.getClient(account.accessToken);
+            const client = this.getClient(
+                account.accessToken,
+                'https://api.tradier.com/v1'
+            );
 
             const response = await client.get<TradierRawPositions>(
                 `/accounts/${account.accountNumber}/positions`
@@ -478,7 +499,10 @@ export class TradingService {
             logger.info(`Getting Tradier history for user: ${userId}`);
 
             const account = await this.getUserTradierAccount(userId);
-            const client = this.getClient(account.accessToken);
+            const client = this.getClient(
+                account.accessToken,
+                'https://api.tradier.com/v1'
+            );
 
             const response = await client.get<TradierRawHistory>(
                 `/accounts/${account.accountNumber}/history`,
@@ -521,7 +545,10 @@ export class TradingService {
             logger.info(`Getting Tradier gain/loss for user: ${userId}`);
 
             const account = await this.getUserTradierAccount(userId);
-            const client = this.getClient(account.accessToken);
+            const client = this.getClient(
+                account.accessToken,
+                'https://api.tradier.com/v1'
+            );
 
             const response = await client.get<TradierRawGainLoss>(
                 `/accounts/${account.accountNumber}/gainloss`,
@@ -570,7 +597,10 @@ export class TradingService {
             logger.info(`Previewing order for user: ${userId} — ${orderData.symbol}`);
 
             const account = await this.getUserTradierAccount(userId);
-            const client = this.getClient(account.accessToken);
+            const client = this.getClient(
+                account.accessToken,
+                'https://api.tradier.com/v1'
+            );
 
             const params: Record<string, any> = {
                 class: 'equity',
@@ -637,7 +667,10 @@ export class TradingService {
             logger.info(`Placing order for user: ${userId} — ${orderData.side} ${orderData.quantity} ${orderData.symbol}`);
 
             const account = await this.getUserTradierAccount(userId);
-            const client = this.getClient(account.accessToken);
+            const client = this.getClient(
+                account.accessToken,
+                'https://api.tradier.com/v1'
+            );
 
             const params: Record<string, any> = {
                 class: 'equity',
@@ -682,7 +715,10 @@ export class TradingService {
             logger.info(`Getting orders for user: ${userId}`);
 
             const account = await this.getUserTradierAccount(userId);
-            const client = this.getClient(account.accessToken);
+            const client = this.getClient(
+                account.accessToken,
+                'https://api.tradier.com/v1'
+            );
 
             const response = await client.get<TradierRawOrders>(
                 `/accounts/${account.accountNumber}/orders`
@@ -714,7 +750,10 @@ export class TradingService {
             logger.info(`Getting order ${orderId} for user: ${userId}`);
 
             const account = await this.getUserTradierAccount(userId);
-            const client = this.getClient(account.accessToken);
+            const client = this.getClient(
+                account.accessToken,
+                'https://api.tradier.com/v1'
+            );
 
             const response = await client.get(
                 `/accounts/${account.accountNumber}/orders/${orderId}`
@@ -744,7 +783,10 @@ export class TradingService {
             logger.info(`Modifying order ${orderId} for user: ${userId}`);
 
             const account = await this.getUserTradierAccount(userId);
-            const client = this.getClient(account.accessToken);
+            const client = this.getClient(
+                account.accessToken,
+                'https://api.tradier.com/v1'
+            );
 
             const params: Record<string, string> = {};
             if (updates.type) params.type = updates.type;
@@ -782,7 +824,10 @@ export class TradingService {
             logger.info(`Cancelling order ${orderId} for user: ${userId}`);
 
             const account = await this.getUserTradierAccount(userId);
-            const client = this.getClient(account.accessToken);
+            const client = this.getClient(
+                account.accessToken,
+                'https://api.tradier.com/v1'
+            );
 
             const response = await client.delete<TradierRawOrderResponse>(
                 `/accounts/${account.accountNumber}/orders/${orderId}`

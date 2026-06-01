@@ -12,6 +12,8 @@ import {
     modifyOrderSchema,
     cancelOrderSchema,
 } from '../validators/trading.validator';
+import config from '../config';
+import TradingService from '../services/trading.service';
 
 const router = Router();
 
@@ -19,20 +21,27 @@ const router = Router();
 // AUTH ROUTES
 // ============================================
 
-router.get(
-    '/auth/test-connect/:userId',
-    (req, res) => {
-        console.log('TEST API')
-        const { userId } = req.params;
-        const params = new URLSearchParams({
-            client_id: process.env.TRADIER_CLIENT_ID!,
-            scope: 'read write trade',
-            response_type: 'code',
-            state: userId,
-        });
-        res.redirect(`https://api.tradier.com/v1/oauth/authorize?${params.toString()}`);
+router.get('/auth/test-connect/:userId', async (req, res, next) => {
+    try {
+        const userId = req.params.userId;
+
+        console.log('=== TEST CONNECT HIT ===');
+        console.log('userId from params:', userId);
+        console.log('TRADIER_CLIENT_ID:', config.TRADIER_CLIENT_ID);
+        console.log('TRADIER_CALLBACK_URL:', config.TRADIER_CALLBACK_URL);
+        console.log('TRADIER_BASIC_AUTH:', config.TRADIER_BASIC_AUTH ? '✅ set' : '❌ MISSING');
+
+        const authUrl = TradingService.getAuthorizationUrl(userId);
+
+        console.log('Generated auth URL:', authUrl);
+        console.log('=== REDIRECTING ===');
+
+        return res.redirect(authUrl);
+    } catch (error: any) {
+        console.error('TEST CONNECT ERROR:', error.message);
+        next(error);
     }
-);
+});
 
 /**
  * @route   GET /api/trading/auth/connect
