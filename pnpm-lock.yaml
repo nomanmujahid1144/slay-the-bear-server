@@ -57,8 +57,8 @@ importers:
         specifier: ^9.0.2
         version: 9.0.3
       mathjs:
-        specifier: ^15.1.0
-        version: 15.1.1
+        specifier: ^11.12.0
+        version: 11.12.0
       morgan:
         specifier: ^1.10.1
         version: 1.10.1
@@ -66,8 +66,8 @@ importers:
         specifier: ^2.0.2
         version: 2.1.1
       nanoid:
-        specifier: ^5.1.6
-        version: 5.1.6
+        specifier: ^3.3.12
+        version: 3.3.12
       pg:
         specifier: ^8.16.3
         version: 8.20.0
@@ -84,8 +84,8 @@ importers:
         specifier: ^19.3.0
         version: 19.3.1(@types/node@24.12.0)
       uuid:
-        specifier: ^13.0.0
-        version: 13.0.0
+        specifier: ^9.0.1
+        version: 9.0.1
       ws:
         specifier: ^8.19.0
         version: 8.19.0
@@ -1092,8 +1092,8 @@ packages:
     resolution: {integrity: sha512-buRG0fpBtRHSTCOASe6hD258tEubFoRLb4ZNA6NxMVHNw2gOcwHo9wyablzMzOA5z9xA9L1KNjk/Nt6MT9aYow==}
     engines: {node: '>= 0.6'}
 
-  fraction.js@5.3.4:
-    resolution: {integrity: sha512-1X1NTtiJphryn/uLQz3whtY6jK3fTqoE3ohKs0tT+Ujr1W59oopxmoEh7Lu5p6vBaPbgoM0bzveAW4Qi5RyWDQ==}
+  fraction.js@4.3.4:
+    resolution: {integrity: sha512-pwiTgt0Q7t+GHZA4yaLjObx4vXmmdcS0iSJ19o8d/goUGgItX9UZWKWNnLHehxviD8wU2IWRsnR8cD5+yOJP2Q==}
 
   fresh@2.0.0:
     resolution: {integrity: sha512-Rx/WycZ60HOaqLKAi6cHRKKI7zxWbJ31MhntmtwMoaTeF7XFH9hhBp8vITaMidfljRQ6eYWCKkaTK+ykVJHP2A==}
@@ -1243,9 +1243,9 @@ packages:
     resolution: {integrity: sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==}
     engines: {node: '>= 0.4'}
 
-  mathjs@15.1.1:
-    resolution: {integrity: sha512-rM668DTtpSzMVoh/cKAllyQVEbBApM5g//IMGD8vD7YlrIz9ITRr3SrdhjaDxcBNTdyETWwPebj2unZyHD7ZdA==}
-    engines: {node: '>= 18'}
+  mathjs@11.12.0:
+    resolution: {integrity: sha512-UGhVw8rS1AyedyI55DGz9q1qZ0p98kyKPyc9vherBkoueLntPfKtPBh14x+V4cdUWK0NZV2TBwqRFlvadscSuw==}
+    engines: {node: '>= 14'}
     hasBin: true
 
   media-typer@0.3.0:
@@ -1294,9 +1294,9 @@ packages:
     resolution: {integrity: sha512-mo+QTzKlx8R7E5ylSXxWzGoXoZbOsRMpyitcht8By2KHvMbf3tjwosZ/Mu/XYU6UuJ3VZnODIrak5ZrPiPyB6A==}
     engines: {node: '>= 10.16.0'}
 
-  nanoid@5.1.6:
-    resolution: {integrity: sha512-c7+7RQ+dMB5dPwwCp4ee1/iV/q2P6aK1mTZcfr1BTuVlyW9hJYiMPybJCcnBlQtuSmTIWNeazm/zqNoZSSElBg==}
-    engines: {node: ^18 || >=20}
+  nanoid@3.3.12:
+    resolution: {integrity: sha512-ZB9RH/39qpq5Vu6Y+NmUaFhQR6pp+M2Xt76XBnEwDaGcVAqhlvxrl3B2bKS5D3NH3QR76v3aSrKaF/Kiy7lEtQ==}
+    engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
   negotiator@1.0.0:
@@ -1654,10 +1654,12 @@ packages:
 
   uuid@10.0.0:
     resolution: {integrity: sha512-8XkAphELsDnEGrDxUOHB3RGvXz6TeuYSGEZBOjtTtPm2lwhGBjLgOzLHB63IUWfBpNucQjND6d3AOudO+H3RWQ==}
+    deprecated: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
     hasBin: true
 
-  uuid@13.0.0:
-    resolution: {integrity: sha512-XQegIaBTVUjSHliKqcnFqYypAd4S+WCYt5NIeRs6w/UAry7z8Y9j5ZwRRL4kzq9U3sD6v+85er9FvkEaBpji2w==}
+  uuid@9.0.1:
+    resolution: {integrity: sha512-b+1eJOlsR9K8HJpow9Ok3fiWOWSIcIzXodvv0rQjVoOVNpWMpxf1wZNpt4y9h10odCNrqnYp1OBzRktckBe3sA==}
+    deprecated: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
     hasBin: true
 
   v8-compile-cache-lib@3.0.1:
@@ -2494,7 +2496,7 @@ snapshots:
 
   forwarded@0.2.0: {}
 
-  fraction.js@5.3.4: {}
+  fraction.js@4.3.4: {}
 
   fresh@2.0.0: {}
 
@@ -2642,13 +2644,13 @@ snapshots:
 
   math-intrinsics@1.1.0: {}
 
-  mathjs@15.1.1:
+  mathjs@11.12.0:
     dependencies:
       '@babel/runtime': 7.28.6
       complex.js: 2.4.3
       decimal.js: 10.6.0
       escape-latex: 1.2.0
-      fraction.js: 5.3.4
+      fraction.js: 4.3.4
       javascript-natural-sort: 0.7.1
       seedrandom: 3.0.5
       tiny-emitter: 2.1.0
@@ -2697,7 +2699,7 @@ snapshots:
       concat-stream: 2.0.0
       type-is: 1.6.18
 
-  nanoid@5.1.6: {}
+  nanoid@3.3.12: {}
 
   negotiator@1.0.0: {}
 
@@ -3037,7 +3039,7 @@ snapshots:
 
   uuid@10.0.0: {}
 
-  uuid@13.0.0: {}
+  uuid@9.0.1: {}
 
   v8-compile-cache-lib@3.0.1: {}
 
