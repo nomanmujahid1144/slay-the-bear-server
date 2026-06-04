@@ -1,7 +1,6 @@
 import axios from 'axios';
 import config from '../config'
 import alpha from 'alphavantage'
-import { mean, multiply, sum, sqrt, MathType } from 'mathjs';
 import { BondPriceCalculatorInput, BondYTMCalculatorInput, BreakEvenCalculatorInput, BudgetCalculatorInput, CDCalculatorInput, CompoundInterestCalculatorInput, CreditPayoffCalculatorInput, CurrencyConverterInput, DebtToIncomeCalculatorInput, DividendCalculatorInput, InvestmentReturnCalculatorInput, LoanAmortizationCalculatorInput, ModifiedDurationCalculatorInput, MortgageCalculatorInput, NetWorthCalculatorInput, PortfolioOptimizerCalculatorInput, RetirementCalculatorInput, RuleOf72CalculatorInput, SavingsGoalCalculatorInput, StockAnalyzerCalculatorInput } from '../validators/calculator.validator';
 
 /**
