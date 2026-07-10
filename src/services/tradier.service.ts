@@ -204,6 +204,8 @@ export class TradierService {
         }
       );
 
+      console.log(response, 'response')
+
       if (!response.data.securities) {
         logger.warn(`No securities found for query: ${query}`);
         return [];
@@ -216,6 +218,7 @@ export class TradierService {
       
       return securities;
     } catch (error: any) {
+      console.log(error, 'error')
       logger.error('Tradier searchSymbols error', { 
         error: error.message,
         query,
