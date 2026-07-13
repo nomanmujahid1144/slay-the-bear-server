@@ -34,7 +34,7 @@ export class TradingService {
     // ============================================
 
     private static getClient(accessToken: string, baseURL?: string): AxiosInstance {
-        return axios.create({
+        const client = axios.create({
             baseURL: baseURL || config.TRADIER_SANDBOX_URL,
             timeout: 15000,
             headers: {
@@ -42,6 +42,19 @@ export class TradingService {
                 'Accept': 'application/json',
             },
         });
+
+        // Intercept 401 responses from Tradier
+        client.interceptors.response.use(
+            (response) => response,
+            (error) => {
+                if (error.response?.status === 401) {
+                    throw ApiError.unauthorized('Your Tradier session has expired. Please reconnect your account.');
+                }
+                throw error;
+            }
+        );
+
+        return client;
     }
 
     // ============================================
@@ -64,6 +77,17 @@ export class TradingService {
 
         if (!account.isActive) {
             throw ApiError.forbidden('Your Tradier account is disconnected. Please reconnect your account.');
+        }
+
+        // Check token expiry
+        if (account.tokenExpiresAt && new Date() > new Date(account.tokenExpiresAt)) {
+            // Mark as inactive in DB
+            await db
+                .update(tradierAccounts)
+                .set({ isActive: false, updatedAt: new Date() })
+                .where(eq(tradierAccounts.userId, userId));
+
+            throw ApiError.unauthorized('Your Tradier session has expired. Please reconnect your account.');
         }
 
         return account;

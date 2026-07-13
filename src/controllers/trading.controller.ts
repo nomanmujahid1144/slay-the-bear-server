@@ -150,6 +150,7 @@ export class TradingController {
                 200
             );
         } catch (error) {
+            console.log(error, 'Error')
             next(error);
         }
     }
