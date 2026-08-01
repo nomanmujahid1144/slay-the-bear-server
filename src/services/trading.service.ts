@@ -35,7 +35,8 @@ export class TradingService {
 
     private static getClient(accessToken: string, baseURL?: string): AxiosInstance {
         const client = axios.create({
-            baseURL: baseURL || config.TRADIER_SANDBOX_URL,
+            // Trading always uses production — sandbox doesn't support real orders
+            baseURL: baseURL || 'https://api.tradier.com/v1',
             timeout: 15000,
             headers: {
                 'Authorization': `Bearer ${accessToken}`,
@@ -44,6 +45,7 @@ export class TradingService {
         });
 
         // Intercept 401 responses from Tradier
+        // If token expired — throw a clear message to reconnect
         client.interceptors.response.use(
             (response) => response,
             (error) => {
@@ -174,7 +176,6 @@ export class TradingService {
         });
 
         const url = `https://api.tradier.com/v1/oauth/authorize?${params.toString()}`;
-        console.log(url, 'URL')
         logger.info(`Tradier OAuth URL generated`);
         return url;
     }
@@ -257,12 +258,16 @@ export class TradingService {
 
             // 2. Fetch user's Tradier profile
             const profileData = await this.fetchTradierProfile(tokenData.access_token);
+            console.log(profileData, 'profileData')
             const profile = profileData.profile;
+            console.log(profile, 'profile')
 
             // 3. Get first account (users usually have one)
             const rawAccount = Array.isArray(profile.account)
                 ? profile.account[0]
                 : profile.account;
+
+                console.log(rawAccount, 'rawAccount')
 
             // 4. Calculate token expiry
             const tokenExpiresAt = new Date(
@@ -607,66 +612,61 @@ export class TradingService {
      */
     static async previewOrder(
         userId: string,
-        orderData: {
-            symbol: string;
-            side: TradierOrderSide;
-            quantity: number;
-            type: TradierOrderType;
-            duration: TradierOrderDuration;
-            price?: number;
-            stop?: number;
-        }
+        symbol: string,
+        side: 'buy' | 'sell' | 'sell_short' | 'buy_to_cover',
+        quantity: number,
+        type: 'market' | 'limit' | 'stop' | 'stop_limit',
+        duration: 'day' | 'gtc' | 'pre' | 'post',
+        price?: number,
+        stop?: number
     ) {
         try {
-            logger.info(`Previewing order for user: ${userId} — ${orderData.symbol}`);
+            logger.info(`Previewing order for user: ${userId}`);
 
+            // Get user's connected Tradier account from DB
             const account = await this.getUserTradierAccount(userId);
-            const client = this.getClient(
-                account.accessToken,
-                'https://api.tradier.com/v1'
-            );
 
-            const params: Record<string, any> = {
-                class: 'equity',
-                symbol: orderData.symbol,
-                side: orderData.side,
-                quantity: orderData.quantity,
-                type: orderData.type,
-                duration: orderData.duration,
-                preview: true,
-            };
+            // Build form-urlencoded body — REQUIRED by Tradier
+            const params = new URLSearchParams();
+            params.append('class', 'equity');   // ← REQUIRED — was missing
+            params.append('symbol', symbol.toUpperCase());
+            params.append('side', side);
+            params.append('quantity', String(quantity));
+            params.append('type', type);
+            params.append('duration', duration);
+            params.append('preview', 'true');     // ← marks this as preview
 
-            if (orderData.price) params.price = orderData.price;
-            if (orderData.stop) params.stop = orderData.stop;
+            // Limit and stop_limit orders require price
+            if (price && (type === 'limit' || type === 'stop_limit')) {
+                params.append('price', String(price));
+            }
+
+            // Stop and stop_limit orders require stop price
+            if (stop && (type === 'stop' || type === 'stop_limit')) {
+                params.append('stop', String(stop));
+            }
+
+            // Always use production URL for trading
+            const client = this.getClient(account.accessToken, 'https://api.tradier.com/v1');
 
             const response = await client.post(
                 `/accounts/${account.accountNumber}/orders`,
-                new URLSearchParams(
-                    Object.fromEntries(
-                        Object.entries(params).map(([k, v]) => [k, String(v)])
-                    )
-                ),
-                { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+                params.toString(),
+                {
+                    headers: {
+                        // CRITICAL: must be form-urlencoded not JSON
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                }
             );
 
-            const order = response.data.order;
             logger.info(`Order preview successful for user: ${userId}`);
-
-            return {
-                symbol: orderData.symbol,
-                side: orderData.side,
-                quantity: orderData.quantity,
-                type: orderData.type,
-                duration: orderData.duration,
-                price: orderData.price,
-                stop: orderData.stop,
-                estimatedCost: order?.cost ?? 0,
-                commission: order?.commission ?? 0,
-                extendedHours: order?.extended_hours ?? false,
-                status: order?.status ?? 'ok',
-            };
+            return response.data;
         } catch (error: any) {
-            logger.error('Preview order error:', error.message);
+            logger.error('Preview order error', { error: error.message, userId });
+            if (error.response?.status === 401) {
+                throw ApiError.unauthorized('Your Tradier session has expired. Please reconnect your account.');
+            }
             throw error instanceof ApiError ? error : ApiError.internal('Failed to preview order');
         }
     }
@@ -677,56 +677,70 @@ export class TradingService {
      */
     static async placeOrder(
         userId: string,
-        orderData: {
-            symbol: string;
-            side: TradierOrderSide;
-            quantity: number;
-            type: TradierOrderType;
-            duration: TradierOrderDuration;
-            price?: number;
-            stop?: number;
-        }
-    ): Promise<{ orderId: number; status: string }> {
+        symbol: string,
+        side: 'buy' | 'sell' | 'sell_short' | 'buy_to_cover',
+        quantity: number,
+        type: 'market' | 'limit' | 'stop' | 'stop_limit',
+        duration: 'day' | 'gtc' | 'pre' | 'post',
+        price?: number,
+        stop?: number
+    ) {
         try {
-            logger.info(`Placing order for user: ${userId} — ${orderData.side} ${orderData.quantity} ${orderData.symbol}`);
+            logger.info(`Placing order for user: ${userId}, symbol: ${symbol}, side: ${side}`);
 
+            // Get user's connected Tradier account from DB
             const account = await this.getUserTradierAccount(userId);
-            const client = this.getClient(
-                account.accessToken,
-                'https://api.tradier.com/v1'
-            );
 
-            const params: Record<string, any> = {
-                class: 'equity',
-                symbol: orderData.symbol,
-                side: orderData.side,
-                quantity: orderData.quantity,
-                type: orderData.type,
-                duration: orderData.duration,
-            };
+            // Build form-urlencoded body — REQUIRED by Tradier
+            const params = new URLSearchParams();
+            params.append('class', 'equity');   // ← REQUIRED — was missing
+            params.append('symbol', symbol.toUpperCase());
+            params.append('side', side);
+            params.append('quantity', String(quantity));
+            params.append('type', type);
+            params.append('duration', duration);
+            // No preview field here — this is a real order
 
-            if (orderData.price) params.price = orderData.price;
-            if (orderData.stop) params.stop = orderData.stop;
+            // Limit and stop_limit orders require price
+            if (price && (type === 'limit' || type === 'stop_limit')) {
+                params.append('price', String(price));
+            }
 
-            const response = await client.post<TradierRawOrderResponse>(
+            // Stop and stop_limit orders require stop price
+            if (stop && (type === 'stop' || type === 'stop_limit')) {
+                params.append('stop', String(stop));
+            }
+
+            console.log(account.accessToken, 'account.accessToken')
+
+            // Always use production URL for trading
+            const client = this.getClient(account.accessToken, 'https://api.tradier.com/v1');
+
+            const response = await client.post(
                 `/accounts/${account.accountNumber}/orders`,
-                new URLSearchParams(
-                    Object.fromEntries(
-                        Object.entries(params).map(([k, v]) => [k, String(v)])
-                    )
-                ),
-                { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+                params.toString(),
+                {
+                    headers: {
+                        // CRITICAL: must be form-urlencoded not JSON
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                }
             );
 
-            const order = response.data.order;
-            logger.info(`Order placed successfully: ${order.id} for user: ${userId}`);
+            console.log(response, 'response')
 
-            return {
-                orderId: order.id,
-                status: order.status,
-            };
+            logger.info(`Order placed successfully for user: ${userId}, order: ${JSON.stringify(response.data)}`);
+            return response.data;
         } catch (error: any) {
-            logger.error('Place order error:', error.message);
+            logger.error('Place order error', { error: error.message, userId });
+            if (error.response?.status === 401) {
+                throw ApiError.unauthorized('Your Tradier session has expired. Please reconnect your account.');
+            }
+            if (error.response?.status === 400) {
+                // Tradier returns validation errors as 400
+                const tradierError = error.response?.data?.errors?.error;
+                throw ApiError.badRequest(tradierError || 'Invalid order parameters');
+            }
             throw error instanceof ApiError ? error : ApiError.internal('Failed to place order');
         }
     }
@@ -734,32 +748,35 @@ export class TradingService {
     /**
      * Get all orders for the account
      */
-    static async getOrders(userId: string): Promise<TradierOrder[]> {
+    static async getOrders(userId: string) {
         try {
             logger.info(`Getting orders for user: ${userId}`);
 
             const account = await this.getUserTradierAccount(userId);
-            const client = this.getClient(
-                account.accessToken,
-                'https://api.tradier.com/v1'
-            );
+            const client = this.getClient(account.accessToken, 'https://api.tradier.com/v1');
 
-            const response = await client.get<TradierRawOrders>(
-                `/accounts/${account.accountNumber}/orders`
-            );
+            const response = await client.get(`/accounts/${account.accountNumber}/orders`);
 
-            if (!response.data.orders || response.data.orders === 'null') {
-                return [];
+            console.log(response, 'Response')
+
+            // Tradier returns "null" as a string when no orders exist
+            // Normalize this to an empty array
+            const orders = response.data?.orders;
+            if (!orders || orders === 'null') {
+                logger.info(`No orders found for user: ${userId}`);
+                return { orders: [] };
             }
 
-            const orders = response.data.orders;
-            if (typeof orders === 'string') return [];
+            // Tradier returns single order as object, multiple as array
+            // Normalize to always return array
+            const orderList = orders.order
+                ? Array.isArray(orders.order)
+                    ? orders.order
+                    : [orders.order]
+                : [];
 
-            const orderList = orders.order;
-            if (!orderList) return [];
-
-            const orderArray = Array.isArray(orderList) ? orderList : [orderList];
-            return orderArray.map(this.normaliseOrder);
+            logger.info(`Orders retrieved for user: ${userId}`);
+            return { orders: orderList };
         } catch (error: any) {
             logger.error('Get orders error:', error.message);
             throw error instanceof ApiError ? error : ApiError.internal('Failed to get orders');
@@ -769,23 +786,29 @@ export class TradingService {
     /**
      * Get a single order by ID
      */
-    static async getOrder(userId: string, orderId: string): Promise<TradierOrder> {
+    static async getOrder(userId: string, orderId: string) {
         try {
-            logger.info(`Getting order ${orderId} for user: ${userId}`);
+            logger.info(`Getting order: ${orderId} for user: ${userId}`);
 
             const account = await this.getUserTradierAccount(userId);
-            const client = this.getClient(
-                account.accessToken,
-                'https://api.tradier.com/v1'
-            );
+
+            // Always use production URL for trading
+            const client = this.getClient(account.accessToken, 'https://api.tradier.com/v1');
 
             const response = await client.get(
                 `/accounts/${account.accountNumber}/orders/${orderId}`
             );
 
-            return this.normaliseOrder(response.data.order);
+            logger.info(`Order retrieved: ${orderId} for user: ${userId}`);
+            return response.data;
         } catch (error: any) {
-            logger.error('Get order error:', error.message);
+            logger.error('Get order error', { error: error.message, userId, orderId });
+            if (error.response?.status === 401) {
+                throw ApiError.unauthorized('Your Tradier session has expired. Please reconnect your account.');
+            }
+            if (error.response?.status === 404) {
+                throw ApiError.notFound(`Order ${orderId} not found`);
+            }
             throw error instanceof ApiError ? error : ApiError.internal('Failed to get order');
         }
     }
@@ -796,43 +819,55 @@ export class TradingService {
     static async modifyOrder(
         userId: string,
         orderId: string,
-        updates: {
-            type?: TradierOrderType;
-            duration?: TradierOrderDuration;
-            price?: number;
-            stop?: number;
-        }
-    ): Promise<{ orderId: number; status: string }> {
+        type: 'market' | 'limit' | 'stop' | 'stop_limit',
+        duration: 'day' | 'gtc' | 'pre' | 'post',
+        price?: number,
+        stop?: number
+    ) {
         try {
-            logger.info(`Modifying order ${orderId} for user: ${userId}`);
+            logger.info(`Modifying order: ${orderId} for user: ${userId}`);
 
+            // Get user's connected Tradier account from DB
             const account = await this.getUserTradierAccount(userId);
-            const client = this.getClient(
-                account.accessToken,
-                'https://api.tradier.com/v1'
-            );
 
-            const params: Record<string, string> = {};
-            if (updates.type) params.type = updates.type;
-            if (updates.duration) params.duration = updates.duration;
-            if (updates.price) params.price = String(updates.price);
-            if (updates.stop) params.stop = String(updates.stop);
+            // Build form-urlencoded body — REQUIRED by Tradier
+            const params = new URLSearchParams();
+            params.append('type', type);
+            params.append('duration', duration);
 
-            const response = await client.put<TradierRawOrderResponse>(
+            if (price && (type === 'limit' || type === 'stop_limit')) {
+                params.append('price', String(price));
+            }
+
+            if (stop && (type === 'stop' || type === 'stop_limit')) {
+                params.append('stop', String(stop));
+            }
+
+            // Always use production URL for trading
+            const client = this.getClient(account.accessToken, 'https://api.tradier.com/v1');
+
+            const response = await client.put(
                 `/accounts/${account.accountNumber}/orders/${orderId}`,
-                new URLSearchParams(params),
-                { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+                params.toString(),
+                {
+                    headers: {
+                        // CRITICAL: must be form-urlencoded not JSON
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                }
             );
 
-            const order = response.data.order;
-            logger.info(`Order ${orderId} modified successfully for user: ${userId}`);
-
-            return {
-                orderId: order.id,
-                status: order.status,
-            };
+            logger.info(`Order modified successfully: ${orderId} for user: ${userId}`);
+            return response.data;
         } catch (error: any) {
-            logger.error('Modify order error:', error.message);
+            logger.error('Modify order error', { error: error.message, userId, orderId });
+            if (error.response?.status === 401) {
+                throw ApiError.unauthorized('Your Tradier session has expired. Please reconnect your account.');
+            }
+            if (error.response?.status === 400) {
+                const tradierError = error.response?.data?.errors?.error;
+                throw ApiError.badRequest(tradierError || 'Invalid order modification parameters');
+            }
             throw error instanceof ApiError ? error : ApiError.internal('Failed to modify order');
         }
     }
@@ -840,32 +875,31 @@ export class TradingService {
     /**
      * Cancel an existing order
      */
-    static async cancelOrder(
-        userId: string,
-        orderId: string
-    ): Promise<{ orderId: number; status: string }> {
+    static async cancelOrder(userId: string, orderId: string) {
         try {
-            logger.info(`Cancelling order ${orderId} for user: ${userId}`);
+            logger.info(`Cancelling order: ${orderId} for user: ${userId}`);
 
+            // Get user's connected Tradier account from DB
             const account = await this.getUserTradierAccount(userId);
-            const client = this.getClient(
-                account.accessToken,
-                'https://api.tradier.com/v1'
-            );
 
-            const response = await client.delete<TradierRawOrderResponse>(
+            // Always use production URL for trading
+            const client = this.getClient(account.accessToken, 'https://api.tradier.com/v1');
+
+            const response = await client.delete(
                 `/accounts/${account.accountNumber}/orders/${orderId}`
             );
 
-            const order = response.data.order;
-            logger.info(`Order ${orderId} cancelled successfully for user: ${userId}`);
-
-            return {
-                orderId: order.id,
-                status: order.status,
-            };
+            logger.info(`Order cancelled successfully: ${orderId} for user: ${userId}`);
+            return response.data;
         } catch (error: any) {
-            logger.error('Cancel order error:', error.message);
+            logger.error('Cancel order error', { error: error.message, userId, orderId });
+            if (error.response?.status === 401) {
+                throw ApiError.unauthorized('Your Tradier session has expired. Please reconnect your account.');
+            }
+            if (error.response?.status === 400) {
+                const tradierError = error.response?.data?.errors?.error;
+                throw ApiError.badRequest(tradierError || 'Unable to cancel order');
+            }
             throw error instanceof ApiError ? error : ApiError.internal('Failed to cancel order');
         }
     }

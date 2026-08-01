@@ -1,28 +1,49 @@
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import { TradingService } from '../services/trading.service';
 import { ApiResponseUtil } from '../utils/ApiResponse';
 import { logger } from '../utils/logger';
-import { AuthRequest } from '../types';
-import config from '../config';
+import type { AuthRequest } from '../types';
+
+// ============================================
+// TRADING CONTROLLER
+// Handles all HTTP requests for Tradier trading
+// All routes require authentication (JWT)
+// ============================================
 
 export class TradingController {
 
     // ============================================
-    // AUTH ENDPOINTS
+    // AUTH — OAuth Connect Flow
     // ============================================
 
     /**
      * GET /api/trading/auth/connect
-     * Redirects user to Tradier OAuth login page
-     * User logs in to their Tradier account and approves our app
+     * Redirect user to Tradier OAuth login page
      */
     static async connect(req: AuthRequest, res: Response, next: NextFunction) {
-    try {
+        try {
             const userId = req.user?.id!;
-            logger.info(`Tradier OAuth connect for user: ${userId}`);
+
+            logger.info(`Tradier connect request for user: ${userId}`);
+
             const authUrl = TradingService.getAuthorizationUrl(userId);
 
-            // Redirect user to Tradier login page
+            return res.redirect(authUrl);
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
+     * GET /api/trading/auth/test-connect/:userId
+     * Test connect — for development/testing only
+     */
+    static async testConnect(req: AuthRequest, res: Response, next: NextFunction) {
+        try {
+            const userId = req.params.userId;
+
+            const authUrl = TradingService.getAuthorizationUrl(userId);
+
             return res.redirect(authUrl);
         } catch (error) {
             next(error);
@@ -31,36 +52,52 @@ export class TradingController {
 
     /**
      * GET /api/trading/auth/callback
-     * Tradier redirects here after user approves our app
-     * Exchanges authorization code for access token
-     * Saves token + account info to DB
+     * Handle OAuth callback from Tradier after user logs in
      */
-    static async callback(req: Request, res: Response, next: NextFunction) {
+    static async callback(req: AuthRequest, res: Response, next: NextFunction) {
         try {
-            const code = req.query.code as string;
-            // const userId = (req as AuthRequest).user?.id;
-            const userId = req.query.state as string;
+            const { code, state: userId } = req.query as { code: string; state: string };
 
             logger.info(`Tradier OAuth callback received for user: ${userId}`);
 
-            // Exchange code for token + save to DB
-            const accountData = await TradingService.connectAccount(userId!, code);
+            if (!code || !userId) {
+                return res.redirect(`${process.env.FRONTEND_URL}/profile?tab=trading&error=missing_params`);
+            }
 
-            // Redirect to frontend success page
-            return res.redirect(
-                `${config.FRONTEND_URL}/profile?tab=trading&connected=true`
+            await TradingService.connectAccount(userId, code);
+
+            return res.redirect(`${process.env.FRONTEND_URL}/profile?tab=trading&connected=true`);
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
+     * GET /api/trading/auth/status
+     * Get Tradier connection status for the authenticated user
+     */
+    static async getStatus(req: AuthRequest, res: Response, next: NextFunction) {
+        try {
+            const userId = req.user?.id!;
+
+            logger.info(`Tradier status request for user: ${userId}`);
+
+            const status = await TradingService.getConnectionStatus(userId);
+
+            return ApiResponseUtil.success(
+                res,
+                status,
+                'Connection status retrieved successfully',
+                200
             );
         } catch (error) {
-            // Redirect to frontend with error
-            return res.redirect(
-                `${config.FRONTEND_URL}/profile?tab=trading&connected=false`
-            );
+            next(error);
         }
     }
 
     /**
      * DELETE /api/trading/auth/disconnect
-     * Disconnects user's Tradier account
+     * Disconnect Tradier account for the authenticated user
      */
     static async disconnect(req: AuthRequest, res: Response, next: NextFunction) {
         try {
@@ -81,31 +118,8 @@ export class TradingController {
         }
     }
 
-    /**
-     * GET /api/trading/auth/status
-     * Returns connection status for the authenticated user
-     */
-    static async getStatus(req: AuthRequest, res: Response, next: NextFunction) {
-        try {
-            const userId = req.user?.id!;
-
-            logger.info(`Tradier status check for user: ${userId}`);
-
-            const status = await TradingService.getConnectionStatus(userId);
-
-            return ApiResponseUtil.success(
-                res,
-                status,
-                'Connection status retrieved successfully',
-                200
-            );
-        } catch (error) {
-            next(error);
-        }
-    }
-
     // ============================================
-    // ACCOUNT ENDPOINTS
+    // ACCOUNT DATA
     // ============================================
 
     /**
@@ -133,7 +147,7 @@ export class TradingController {
 
     /**
      * GET /api/trading/account/balances
-     * Returns buying power, cash, equity etc.
+     * Returns account balances (cash, buying power, equity)
      */
     static async getBalances(req: AuthRequest, res: Response, next: NextFunction) {
         try {
@@ -150,14 +164,13 @@ export class TradingController {
                 200
             );
         } catch (error) {
-            console.log(error, 'Error')
             next(error);
         }
     }
 
     /**
      * GET /api/trading/account/positions
-     * Returns current stock holdings
+     * Returns current open positions
      */
     static async getPositions(req: AuthRequest, res: Response, next: NextFunction) {
         try {
@@ -169,7 +182,7 @@ export class TradingController {
 
             return ApiResponseUtil.success(
                 res,
-                { data: positions, count: positions.length },
+                positions,
                 'Positions retrieved successfully',
                 200
             );
@@ -180,26 +193,19 @@ export class TradingController {
 
     /**
      * GET /api/trading/account/history
-     * Returns transaction history
+     * Returns account transaction history
      */
     static async getHistory(req: AuthRequest, res: Response, next: NextFunction) {
         try {
             const userId = req.user?.id!;
-            const { limit, offset, type, start, end } = req.query;
 
             logger.info(`Tradier get history for user: ${userId}`);
 
-            const history = await TradingService.getHistory(userId, {
-                limit: limit ? parseInt(limit as string, 10) : undefined,
-                offset: offset ? parseInt(offset as string, 10) : undefined,
-                type: type as string | undefined,
-                start: start as string | undefined,
-                end: end as string | undefined,
-            });
+            const history = await TradingService.getHistory(userId, {});
 
             return ApiResponseUtil.success(
                 res,
-                { data: history, count: history.length },
+                history,
                 'History retrieved successfully',
                 200
             );
@@ -210,27 +216,19 @@ export class TradingController {
 
     /**
      * GET /api/trading/account/gainloss
-     * Returns closed positions P&L summary
+     * Returns gain/loss for closed positions
      */
     static async getGainLoss(req: AuthRequest, res: Response, next: NextFunction) {
         try {
             const userId = req.user?.id!;
-            const { limit, offset, sortBy, sort, start, end } = req.query;
 
             logger.info(`Tradier get gain/loss for user: ${userId}`);
 
-            const gainLoss = await TradingService.getGainLoss(userId, {
-                limit: limit ? parseInt(limit as string, 10) : undefined,
-                offset: offset ? parseInt(offset as string, 10) : undefined,
-                sortBy: sortBy as string | undefined,
-                sort: sort as string | undefined,
-                start: start as string | undefined,
-                end: end as string | undefined,
-            });
+            const gainloss = await TradingService.getGainLoss(userId, {});
 
             return ApiResponseUtil.success(
                 res,
-                { data: gainLoss, count: gainLoss.length },
+                gainloss,
                 'Gain/loss retrieved successfully',
                 200
             );
@@ -240,78 +238,12 @@ export class TradingController {
     }
 
     // ============================================
-    // ORDER ENDPOINTS
+    // ORDERS
     // ============================================
 
     /**
-     * POST /api/trading/orders/preview
-     * Preview an order — shows cost, commission etc.
-     * Does NOT place the order
-     */
-    static async previewOrder(req: AuthRequest, res: Response, next: NextFunction) {
-        try {
-            const userId = req.user?.id!;
-            const { symbol, side, quantity, type, duration, price, stop } = req.body;
-
-            logger.info(`Tradier preview order for user: ${userId} — ${side} ${quantity} ${symbol}`);
-
-            const preview = await TradingService.previewOrder(userId, {
-                symbol,
-                side,
-                quantity,
-                type,
-                duration,
-                price,
-                stop,
-            });
-
-            return ApiResponseUtil.success(
-                res,
-                preview,
-                'Order preview successful',
-                200
-            );
-        } catch (error) {
-            next(error);
-        }
-    }
-
-    /**
-     * POST /api/trading/orders/place
-     * Place a buy or sell order
-     * This executes a real trade on Tradier sandbox/production
-     */
-    static async placeOrder(req: AuthRequest, res: Response, next: NextFunction) {
-        try {
-            const userId = req.user?.id!;
-            const { symbol, side, quantity, type, duration, price, stop } = req.body;
-
-            logger.info(`Tradier place order for user: ${userId} — ${side} ${quantity} ${symbol}`);
-
-            const result = await TradingService.placeOrder(userId, {
-                symbol,
-                side,
-                quantity,
-                type,
-                duration,
-                price,
-                stop,
-            });
-
-            return ApiResponseUtil.success(
-                res,
-                result,
-                `Order placed successfully`,
-                201
-            );
-        } catch (error) {
-            next(error);
-        }
-    }
-
-    /**
      * GET /api/trading/orders
-     * Get all orders for the account
+     * Returns all orders for the account
      */
     static async getOrders(req: AuthRequest, res: Response, next: NextFunction) {
         try {
@@ -323,7 +255,7 @@ export class TradingController {
 
             return ApiResponseUtil.success(
                 res,
-                { data: orders, count: orders.length },
+                orders,
                 'Orders retrieved successfully',
                 200
             );
@@ -334,14 +266,14 @@ export class TradingController {
 
     /**
      * GET /api/trading/orders/:orderId
-     * Get a single order by ID
+     * Returns a specific order by ID
      */
     static async getOrder(req: AuthRequest, res: Response, next: NextFunction) {
         try {
-            const userId = req.user?.id!;
-            const orderId = req.params.orderId as string;
+            const userId   = req.user?.id!;
+            const { orderId } = req.params;
 
-            logger.info(`Tradier get order ${orderId} for user: ${userId}`);
+            logger.info(`Tradier get order: ${orderId} for user: ${userId}`);
 
             const order = await TradingService.getOrder(userId, orderId);
 
@@ -357,23 +289,121 @@ export class TradingController {
     }
 
     /**
-     * PUT /api/trading/orders/:orderId
-     * Modify an existing order
+     * POST /api/trading/orders/preview
+     * Preview an order — validates without placing
+     * Body: { symbol, side, quantity, type, duration, price?, stop? }
      */
-    static async modifyOrder(req: AuthRequest, res: Response, next: NextFunction) {
+    static async previewOrder(req: AuthRequest, res: Response, next: NextFunction) {
         try {
             const userId = req.user?.id!;
-            const orderId = req.params.orderId as string;
-            const { type, duration, price, stop } = req.body;
 
-            logger.info(`Tradier modify order ${orderId} for user: ${userId}`);
-
-            const result = await TradingService.modifyOrder(userId, orderId, {
+            // Destructure all fields from body
+            const {
+                symbol,
+                side,
+                quantity,
                 type,
                 duration,
                 price,
                 stop,
-            });
+            } = req.body;
+
+            logger.info(`Tradier preview order for user: ${userId}, symbol: ${symbol}`);
+
+            const result = await TradingService.previewOrder(
+                userId,
+                symbol,
+                side,
+                quantity,
+                type,
+                duration,
+                price,
+                stop
+            );
+
+            return ApiResponseUtil.success(
+                res,
+                result,
+                'Order preview successful',
+                200
+            );
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
+     * POST /api/trading/orders/place
+     * Place a real order on Tradier brokerage
+     * Body: { symbol, side, quantity, type, duration, price?, stop? }
+     */
+    static async placeOrder(req: AuthRequest, res: Response, next: NextFunction) {
+        try {
+            const userId = req.user?.id!;
+
+            // Destructure all fields from body
+            const {
+                symbol,
+                side,
+                quantity,
+                type,
+                duration,
+                price,
+                stop,
+            } = req.body;
+
+            logger.info(`Tradier place order for user: ${userId}, symbol: ${symbol}, side: ${side}`);
+
+            const result = await TradingService.placeOrder(
+                userId,
+                symbol,
+                side,
+                quantity,
+                type,
+                duration,
+                price,
+                stop
+            );
+
+            return ApiResponseUtil.success(
+                res,
+                result,
+                'Order placed successfully',
+                201
+            );
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
+     * PUT /api/trading/orders/:orderId
+     * Modify an existing pending order
+     * Body: { type, duration, price?, stop? }
+     */
+    static async modifyOrder(req: AuthRequest, res: Response, next: NextFunction) {
+        try {
+            const userId              = req.user?.id!;
+            const { orderId }         = req.params;
+
+            // Destructure all fields from body
+            const {
+                type,
+                duration,
+                price,
+                stop,
+            } = req.body;
+
+            logger.info(`Tradier modify order: ${orderId} for user: ${userId}`);
+
+            const result = await TradingService.modifyOrder(
+                userId,
+                orderId,
+                type,
+                duration,
+                price,
+                stop
+            );
 
             return ApiResponseUtil.success(
                 res,
@@ -388,14 +418,14 @@ export class TradingController {
 
     /**
      * DELETE /api/trading/orders/:orderId
-     * Cancel an existing order
+     * Cancel an existing pending order
      */
     static async cancelOrder(req: AuthRequest, res: Response, next: NextFunction) {
         try {
-            const userId = req.user?.id!;
-            const orderId = req.params.orderId as string;
+            const userId      = req.user?.id!;
+            const { orderId } = req.params;
 
-            logger.info(`Tradier cancel order ${orderId} for user: ${userId}`);
+            logger.info(`Tradier cancel order: ${orderId} for user: ${userId}`);
 
             const result = await TradingService.cancelOrder(userId, orderId);
 

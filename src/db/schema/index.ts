@@ -5,3 +5,4 @@ export * from './referral.schema';
 export * from './calculator-history.schema';
 export * from './iap.schema';
 export * from './trading.schema';
+export * from './education';
