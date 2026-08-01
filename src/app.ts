@@ -19,9 +19,23 @@ app.use(helmet()); // Security headers
 /**
  * CORS Configuration
  */
+const allowedOrigins = [
+  config.FRONTEND_URL,                    // https://slaythebear.com
+  'https://www.slaythebear.com',          // www variant
+  'https://tradier.slaythebear.com',      // testing portal (future-proof)
+  'http://localhost:3000',                // local dev
+];
+
 app.use(
   cors({
-    origin: config.FRONTEND_URL,
+    origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, curl, server-to-server)
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
   })
 );
