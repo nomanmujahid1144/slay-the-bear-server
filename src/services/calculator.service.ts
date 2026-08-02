@@ -968,16 +968,16 @@ export class CalculatorService {
     try {
 
       const alpha = require('alphavantage')({ key: apiKey });
-      const data = await alpha.data.monthly(symbol);
+      const data = await alpha.data.monthly_adjusted(symbol);
 
-      if (!data['Monthly Time Series']) {
+      if (!data['Monthly Adjusted Time Series']) {
         throw new Error(`No monthly time series data for ${symbol}`);
       }
 
-      const prices = Object.entries(data['Monthly Time Series'])
+      const prices = Object.entries(data['Monthly Adjusted Time Series'])
         .map(([date, values]: [string, any]) => ({
           date: new Date(date),
-          price: parseFloat(values['4. close']),
+          price: parseFloat(values['5. adjusted close']),
         }))
         .sort((a, b) => a.date.getTime() - b.date.getTime())
         .filter((item) => item.date >= new Date(Date.now() - 5 * 365 * 24 * 60 * 60 * 1000))
@@ -1014,6 +1014,7 @@ export class CalculatorService {
     }
     return covMatrix;
   }
+
   private static portfolioReturn(weights: number[], returns: number[][]) {
     // Calculate mean returns for each asset
     const meanReturns = returns.map(assetReturns => {
@@ -1042,6 +1043,65 @@ export class CalculatorService {
   private static calculateVaR(volatility: number, timePeriod = 1) {
     const zScore = -1.645; // 95% confidence
     return zScore * volatility * Math.sqrt(timePeriod);
+  }
+
+  /**
+   * Historical backtest: grow the investment using actual price history
+   * with the optimized weights (buy & hold from first to last price).
+   */
+  private static backtestPortfolio(
+    weights: number[],
+    prices: number[][],
+    investmentAmount: number
+  ): { totalValue: number; annualizedReturn: number; years: number } {
+    let totalValue = 0;
+
+    for (let i = 0; i < weights.length; i++) {
+      const firstPrice = prices[i][0];
+      const lastPrice = prices[i][prices[i].length - 1];
+      const growthFactor = firstPrice > 0 ? lastPrice / firstPrice : 1;
+      totalValue += weights[i] * investmentAmount * growthFactor;
+    }
+
+    // 60 monthly prices ≈ 5 years
+    const months = prices[0].length - 1;
+    const years = months / 12;
+    const annualizedReturn = Math.pow(totalValue / investmentAmount, 1 / years) - 1;
+
+    return { totalValue, annualizedReturn, years };
+  }
+
+  /**
+   * Human-readable explanation matching the reference output format.
+   */
+  private static buildExplanation(params: {
+    expectedReturn: number;   // decimal, e.g. 0.1628
+    volatility: number;       // decimal
+    sharpeRatio: number;
+    var95: number;            // decimal, negative
+    potentialLoss: number;    // dollars
+    investmentAmount: number;
+    backtestValue: number;
+    backtestAnnualized: number; // decimal
+    years: number;
+  }): string[] {
+    const p = params;
+    const pct = (v: number) => (v * 100).toFixed(2) + '%';
+    const usd = (v: number) => '$' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    return [
+      `This portfolio has been optimized to minimize risk while achieving your target return. The expected return is ${pct(p.expectedReturn)} with a volatility of ${pct(p.volatility)}. The Sharpe ratio, which measures risk-adjusted return, is ${p.sharpeRatio.toFixed(2)}.`,
+
+      `Value at Risk (VaR) indicates that there is a 95% confidence level that your portfolio will not lose more than ${pct(p.var95)} in one month, which corresponds to a potential loss of ${usd(-Math.abs(p.potentialLoss))}.`,
+
+      p.expectedReturn > p.volatility
+        ? `Your portfolio's expected return (${pct(p.expectedReturn)}) is higher than its volatility (${pct(p.volatility)}). This suggests a good balance between risk and reward, meaning you are likely to be compensated well for the risk you're taking.`
+        : `Your portfolio's volatility (${pct(p.volatility)}) is higher than its expected return (${pct(p.expectedReturn)}). This suggests you are taking on significant risk relative to the expected reward — consider adjusting your target or symbols.`,
+
+      `Based on the past ${Math.round(p.years)} years of performance, had you invested ${usd(p.investmentAmount)}, you would have achieved an annualized return of approximately ${pct(p.backtestAnnualized)} and your portfolio value would be ${usd(p.backtestValue)}.`,
+
+      `Disclaimer: This analysis is for educational purposes only and does not constitute financial advice. Please consult a financial professional before making any investment decisions.`,
+    ];
   }
 
   // Add main method
@@ -1074,6 +1134,22 @@ export class CalculatorService {
       const potentialLoss = investmentAmount * Math.abs(var95);
       const sharpeRatio = (optReturn - riskFreeRate) / optVolatility;
 
+      // Historical backtest with the optimized weights
+      const backtest = this.backtestPortfolio(optimalWeights, prices, investmentAmount);
+
+      // Human-readable explanation
+      const explanation = this.buildExplanation({
+        expectedReturn: optReturn,
+        volatility: optVolatility,
+        sharpeRatio,
+        var95,
+        potentialLoss,
+        investmentAmount,
+        backtestValue: backtest.totalValue,
+        backtestAnnualized: backtest.annualizedReturn,
+        years: backtest.years,
+      });
+
       return {
         portfolio: symbols.map((symbol, index) => ({
           symbol: symbol.symbol,
@@ -1086,7 +1162,10 @@ export class CalculatorService {
           sharpeRatio: parseFloat(sharpeRatio.toFixed(2)),
           valueAtRisk: parseFloat((Math.abs(var95) * 100).toFixed(2)),
           potentialLoss: parseFloat(potentialLoss.toFixed(2)),
+          annualizedReturn5Y: parseFloat((backtest.annualizedReturn * 100).toFixed(2)),
+          totalValueAfter5Y: parseFloat(backtest.totalValue.toFixed(2)),
         },
+        explanation,
         inputs: {
           investmentAmount,
           targetReturn: parseFloat((targetReturn * 100).toFixed(2)),
