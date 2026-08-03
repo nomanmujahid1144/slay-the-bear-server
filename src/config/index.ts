@@ -44,6 +44,7 @@ interface Config {
     GOOGLE_SERVICE_ACCOUNT_KEY: string;
 
     // Tradier — Market Data
+    TRADIER_MODE: string;
     TRADIER_SANDBOX_ACCESS_TOKEN: string;
     TRADIER_SANDBOX_ACCOUNT_NUMBER: string;
     TRADIER_API_URL: string;
@@ -114,6 +115,7 @@ const config: Config = {
     GOOGLE_SERVICE_ACCOUNT_KEY: process.env.GOOGLE_SERVICE_ACCOUNT_KEY || '',
 
     // Tradier — Market Data
+    TRADIER_MODE: process.env.TRADIER_MODE || 'production',
     TRADIER_SANDBOX_ACCESS_TOKEN: process.env.TRADIER_SANDBOX_ACCESS_TOKEN || '',
     TRADIER_SANDBOX_ACCOUNT_NUMBER: process.env.TRADIER_SANDBOX_ACCOUNT_NUMBER || '',
     TRADIER_API_URL: process.env.TRADIER_API_URL || 'https://api.tradier.com/v1',
