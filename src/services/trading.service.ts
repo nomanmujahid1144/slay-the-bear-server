@@ -441,6 +441,9 @@ export class TradingService {
             // const account = await this.getUserTradierAccount(userId);
             // const client = this.getClient(account.accessToken, 'https://api.tradier.com/v1');
             const { accountNumber, accessToken, baseUrl } = await this.getTradierContext(userId);
+            console.log(accountNumber);
+            console.log(accessToken);
+            console.log(baseUrl);
             const client = this.getClient(accessToken, baseUrl);
 
             const response = await client.get<TradierRawProfile>('/user/profile');
