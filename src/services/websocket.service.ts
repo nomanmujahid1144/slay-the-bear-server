@@ -182,7 +182,7 @@ export class WebSocketService {
             const sessionUrl = 'https://api.tradier.com/v1/markets/events/session';
             
             // Use streaming token (falls back to regular token if not set)
-            const streamingToken = (config as any).TRADIER_STREAMING_TOKEN || config.TRADIER_ACCESS_TOKEN;
+            const streamingToken = (config as any).TRADIER_STREAMING_TOKEN || config.TRADIER_SANDBOX_ACCESS_TOKEN;
             
             const response = await axios.post(
                 sessionUrl,

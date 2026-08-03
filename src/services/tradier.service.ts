@@ -37,7 +37,7 @@ export class TradierService {
         {
           params: { symbols: symbolsParam, greeks: false },
           headers: {
-            'Authorization': `Bearer ${config.TRADIER_ACCESS_TOKEN}`,
+            'Authorization': `Bearer ${config.TRADIER_SANDBOX_ACCESS_TOKEN}`,
             'Accept': 'application/json',
           },
         }
@@ -90,7 +90,7 @@ export class TradierService {
         {
           params,
           headers: {
-            'Authorization': `Bearer ${config.TRADIER_ACCESS_TOKEN}`,
+            'Authorization': `Bearer ${config.TRADIER_SANDBOX_ACCESS_TOKEN}`,
             'Accept': 'application/json',
           },
         }
@@ -148,7 +148,7 @@ export class TradierService {
         {
           params,
           headers: {
-            'Authorization': `Bearer ${config.TRADIER_ACCESS_TOKEN}`,
+            'Authorization': `Bearer ${config.TRADIER_SANDBOX_ACCESS_TOKEN}`,
             'Accept': 'application/json',
           },
         }
@@ -198,7 +198,7 @@ export class TradierService {
         {
           params: { q: query, indexes },
           headers: {
-            'Authorization': `Bearer ${config.TRADIER_ACCESS_TOKEN}`,
+            'Authorization': `Bearer ${config.TRADIER_SANDBOX_ACCESS_TOKEN}`,
             'Accept': 'application/json',
           },
         }

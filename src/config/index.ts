@@ -44,8 +44,8 @@ interface Config {
     GOOGLE_SERVICE_ACCOUNT_KEY: string;
 
     // Tradier — Market Data
-    TRADIER_ACCESS_TOKEN: string;
-    TRADIER_ACCOUNT_NUMBER: string;
+    TRADIER_SANDBOX_ACCESS_TOKEN: string;
+    TRADIER_SANDBOX_ACCOUNT_NUMBER: string;
     TRADIER_API_URL: string;
 
     // Tradier — WebSocket Streaming
@@ -114,13 +114,13 @@ const config: Config = {
     GOOGLE_SERVICE_ACCOUNT_KEY: process.env.GOOGLE_SERVICE_ACCOUNT_KEY || '',
 
     // Tradier — Market Data
-    TRADIER_ACCESS_TOKEN: process.env.TRADIER_ACCESS_TOKEN || '',
-    TRADIER_ACCOUNT_NUMBER: process.env.TRADIER_ACCOUNT_NUMBER || '',
+    TRADIER_SANDBOX_ACCESS_TOKEN: process.env.TRADIER_SANDBOX_ACCESS_TOKEN || '',
+    TRADIER_SANDBOX_ACCOUNT_NUMBER: process.env.TRADIER_SANDBOX_ACCOUNT_NUMBER || '',
     TRADIER_API_URL: process.env.TRADIER_API_URL || 'https://api.tradier.com/v1',
 
     // Tradier — WebSocket Streaming
-    TRADIER_STREAMING_TOKEN: process.env.TRADIER_STREAMING_TOKEN || process.env.TRADIER_ACCESS_TOKEN || '',
-    TRADIER_STREAMING_ACCOUNT: process.env.TRADIER_STREAMING_ACCOUNT || process.env.TRADIER_ACCOUNT_NUMBER || '',
+    TRADIER_STREAMING_TOKEN: process.env.TRADIER_STREAMING_TOKEN || process.env.TRADIER_SANDBOX_ACCESS_TOKEN || '',
+    TRADIER_STREAMING_ACCOUNT: process.env.TRADIER_STREAMING_ACCOUNT || process.env.TRADIER_SANDBOX_ACCOUNT_NUMBER || '',
 
     // Tradier — Trading (OAuth)
     TRADIER_CLIENT_ID: process.env.TRADIER_CLIENT_ID || '',

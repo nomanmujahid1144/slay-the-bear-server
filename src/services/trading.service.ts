@@ -10,9 +10,7 @@ import {
     TradierRawProfile,
     TradierRawBalances,
     TradierRawPositions,
-    TradierRawOrders,
     TradierRawOrder,
-    TradierRawOrderResponse,
     TradierRawHistory,
     TradierRawGainLoss,
     TradierPosition,
@@ -30,7 +28,7 @@ export class TradingService {
 
     private static getClient(accessToken: string, baseURL?: string): AxiosInstance {
         const client = axios.create({
-            // Trading always uses production — sandbox doesn't support real orders
+            // Base URL is passed explicitly by getTradierContext (sandbox vs production)
             baseURL: baseURL || 'https://api.tradier.com/v1',
             timeout: 15000,
             headers: {
@@ -88,6 +86,34 @@ export class TradingService {
         }
 
         return account;
+    }
+
+    // ============================================
+    // PRIVATE: GET TRADIER CONTEXT
+    // Dev  → hardcoded sandbox account (fast local/Uzair testing)
+    // Prod → real user's connected account from DB
+    // ============================================
+    private static async getTradierContext(userId: string): Promise<{
+        accountNumber: string;
+        accessToken: string;
+        baseUrl: string;
+    }> {
+        if (config.NODE_ENV !== 'production') {
+            // Sandbox testing account — hardcoded for dev/testing only.
+            // Sandbox MUST use sandbox.tradier.com, not api.tradier.com.
+            return {
+                accountNumber: config.TRADIER_SANDBOX_ACCOUNT_NUMBER,
+                accessToken: config.TRADIER_SANDBOX_ACCESS_TOKEN,
+                baseUrl: config.TRADIER_SANDBOX_URL,
+            };
+        }
+
+        const account = await this.getUserTradierAccount(userId);
+        return {
+            accountNumber: account.accountNumber,
+            accessToken: account.accessToken,
+            baseUrl: config.TRADIER_API_URL,
+        };
     }
 
     // ============================================
@@ -407,15 +433,17 @@ export class TradingService {
         try {
             logger.info(`Getting Tradier profile for user: ${userId}`);
 
-            const account = await this.getUserTradierAccount(userId);
-            const client = this.getClient(account.accessToken, 'https://api.tradier.com/v1');
+            // const account = await this.getUserTradierAccount(userId);
+            // const client = this.getClient(account.accessToken, 'https://api.tradier.com/v1');
+            const { accountNumber, accessToken, baseUrl } = await this.getTradierContext(userId);
+            const client = this.getClient(accessToken, baseUrl);
 
             const response = await client.get<TradierRawProfile>('/user/profile');
             const profile = response.data.profile;
             const accountList = Array.isArray(profile.account) ? profile.account : [profile.account];
 
             // Match the account we actually connected/stored — don't just take the first one
-            const rawAccount = accountList.find(a => a.account_number === account.accountNumber)
+            const rawAccount = accountList.find(a => a.account_number === accountNumber)
                 ?? accountList[0];
 
             return {
@@ -439,14 +467,13 @@ export class TradingService {
         try {
             logger.info(`Getting Tradier balances for user: ${userId}`);
 
-            const account = await this.getUserTradierAccount(userId);
-            const client = this.getClient(
-                account.accessToken,
-                'https://api.tradier.com/v1'
-            );
+            // const account = await this.getUserTradierAccount(userId);
+            // const client = this.getClient(account.accessToken, 'https://api.tradier.com/v1' );
+            const { accountNumber, accessToken, baseUrl } = await this.getTradierContext(userId);
+            const client = this.getClient(accessToken, baseUrl);
 
             const response = await client.get<TradierRawBalances>(
-                `/accounts/${account.accountNumber}/balances`
+                `/accounts/${accountNumber}/balances`
             );
 
             const b = response.data.balances;
@@ -497,14 +524,13 @@ export class TradingService {
         try {
             logger.info(`Getting Tradier positions for user: ${userId}`);
 
-            const account = await this.getUserTradierAccount(userId);
-            const client = this.getClient(
-                account.accessToken,
-                'https://api.tradier.com/v1'
-            );
+            // const account = await this.getUserTradierAccount(userId);
+            // const client = this.getClient(account.accessToken, 'https://api.tradier.com/v1' );
+            const { accountNumber, accessToken, baseUrl } = await this.getTradierContext(userId);
+            const client = this.getClient(accessToken, baseUrl);
 
             const response = await client.get<TradierRawPositions>(
-                `/accounts/${account.accountNumber}/positions`
+                `/accounts/${accountNumber}/positions`
             );
 
             // Tradier returns "null" string when no positions
@@ -542,14 +568,13 @@ export class TradingService {
         try {
             logger.info(`Getting Tradier history for user: ${userId}`);
 
-            const account = await this.getUserTradierAccount(userId);
-            const client = this.getClient(
-                account.accessToken,
-                'https://api.tradier.com/v1'
-            );
+            // const account = await this.getUserTradierAccount(userId);
+            // const client = this.getClient(account.accessToken, 'https://api.tradier.com/v1' );
+            const { accountNumber, accessToken, baseUrl } = await this.getTradierContext(userId);
+            const client = this.getClient(accessToken, baseUrl);
 
             const response = await client.get<TradierRawHistory>(
-                `/accounts/${account.accountNumber}/history`,
+                `/accounts/${accountNumber}/history`,
                 { params }
             );
 
@@ -588,14 +613,13 @@ export class TradingService {
         try {
             logger.info(`Getting Tradier gain/loss for user: ${userId}`);
 
-            const account = await this.getUserTradierAccount(userId);
-            const client = this.getClient(
-                account.accessToken,
-                'https://api.tradier.com/v1'
-            );
+            // const account = await this.getUserTradierAccount(userId);
+            // const client = this.getClient(account.accessToken, 'https://api.tradier.com/v1' );
+            const { accountNumber, accessToken, baseUrl } = await this.getTradierContext(userId);
+            const client = this.getClient(accessToken, baseUrl);
 
             const response = await client.get<TradierRawGainLoss>(
-                `/accounts/${account.accountNumber}/gainloss`,
+                `/accounts/${accountNumber}/gainloss`,
                 { params }
             );
 
@@ -639,7 +663,10 @@ export class TradingService {
             logger.info(`Previewing order for user: ${userId}`);
 
             // Get user's connected Tradier account from DB
-            const account = await this.getUserTradierAccount(userId);
+            // const account = await this.getUserTradierAccount(userId);
+            // const client = this.getClient(account.accessToken, 'https://api.tradier.com/v1');
+            const { accountNumber, accessToken, baseUrl } = await this.getTradierContext(userId);
+            const client = this.getClient(accessToken, baseUrl);
 
             // Build form-urlencoded body — REQUIRED by Tradier
             const params = new URLSearchParams();
@@ -661,11 +688,8 @@ export class TradingService {
                 params.append('stop', String(stop));
             }
 
-            // Always use production URL for trading
-            const client = this.getClient(account.accessToken, 'https://api.tradier.com/v1');
-
             const response = await client.post(
-                `/accounts/${account.accountNumber}/orders`,
+                `/accounts/${accountNumber}/orders`,
                 params.toString(),
                 {
                     headers: {
@@ -716,7 +740,10 @@ export class TradingService {
             logger.info(`Placing order for user: ${userId}, symbol: ${symbol}, side: ${side}`);
 
             // Get user's connected Tradier account from DB
-            const account = await this.getUserTradierAccount(userId);
+            // const account = await this.getUserTradierAccount(userId);
+            // const client = this.getClient(account.accessToken, 'https://api.tradier.com/v1');
+            const { accountNumber, accessToken, baseUrl } = await this.getTradierContext(userId);
+            const client = this.getClient(accessToken, baseUrl);
 
             // Build form-urlencoded body — REQUIRED by Tradier
             const params = new URLSearchParams();
@@ -738,13 +765,8 @@ export class TradingService {
                 params.append('stop', String(stop));
             }
 
-            console.log(account.accessToken, 'account.accessToken')
-
-            // Always use production URL for trading
-            const client = this.getClient(account.accessToken, 'https://api.tradier.com/v1');
-
             const response = await client.post(
-                `/accounts/${account.accountNumber}/orders`,
+                `/accounts/${accountNumber}/orders`,
                 params.toString(),
                 {
                     headers: {
@@ -753,8 +775,6 @@ export class TradingService {
                     },
                 }
             );
-
-            console.log(response, 'response')
 
             // Tradier returns HTTP 200 even when rejecting an order —
             // check the body for embedded errors before declaring success
@@ -786,10 +806,12 @@ export class TradingService {
         try {
             logger.info(`Getting orders for user: ${userId}`);
 
-            const account = await this.getUserTradierAccount(userId);
-            const client = this.getClient(account.accessToken, 'https://api.tradier.com/v1');
+            // const account = await this.getUserTradierAccount(userId);
+            // const client = this.getClient(account.accessToken, 'https://api.tradier.com/v1');
+            const { accountNumber, accessToken, baseUrl } = await this.getTradierContext(userId);
+            const client = this.getClient(accessToken, baseUrl);
 
-            const response = await client.get(`/accounts/${account.accountNumber}/orders`);
+            const response = await client.get(`/accounts/${accountNumber}/orders`);
 
             // Tradier returns "null" as a string when no orders exist
             // Normalize this to an empty array
@@ -823,11 +845,13 @@ export class TradingService {
         try {
             logger.info(`Getting order: ${orderId} for user: ${userId}`);
 
-            const account = await this.getUserTradierAccount(userId);
-            const client = this.getClient(account.accessToken, 'https://api.tradier.com/v1');
+            // const account = await this.getUserTradierAccount(userId);
+            // const client = this.getClient(account.accessToken, 'https://api.tradier.com/v1');
+            const { accountNumber, accessToken, baseUrl } = await this.getTradierContext(userId);
+            const client = this.getClient(accessToken, baseUrl);
 
             const response = await client.get(
-                `/accounts/${account.accountNumber}/orders/${orderId}`
+                `/accounts/${accountNumber}/orders/${orderId}`
             );
 
             logger.info(`Order retrieved: ${orderId} for user: ${userId}`);
@@ -859,7 +883,10 @@ export class TradingService {
             logger.info(`Modifying order: ${orderId} for user: ${userId}`);
 
             // Get user's connected Tradier account from DB
-            const account = await this.getUserTradierAccount(userId);
+            // const account = await this.getUserTradierAccount(userId);
+            // const client = this.getClient(account.accessToken, 'https://api.tradier.com/v1');
+            const { accountNumber, accessToken, baseUrl } = await this.getTradierContext(userId);
+            const client = this.getClient(accessToken, baseUrl);
 
             // Build form-urlencoded body — REQUIRED by Tradier
             const params = new URLSearchParams();
@@ -874,11 +901,8 @@ export class TradingService {
                 params.append('stop', String(stop));
             }
 
-            // Always use production URL for trading
-            const client = this.getClient(account.accessToken, 'https://api.tradier.com/v1');
-
             const response = await client.put(
-                `/accounts/${account.accountNumber}/orders/${orderId}`,
+                `/accounts/${accountNumber}/orders/${orderId}`,
                 params.toString(),
                 {
                     headers: {
@@ -911,13 +935,13 @@ export class TradingService {
             logger.info(`Cancelling order: ${orderId} for user: ${userId}`);
 
             // Get user's connected Tradier account from DB
-            const account = await this.getUserTradierAccount(userId);
-
-            // Always use production URL for trading
-            const client = this.getClient(account.accessToken, 'https://api.tradier.com/v1');
+            // const account = await this.getUserTradierAccount(userId);
+            // const client = this.getClient(account.accessToken, 'https://api.tradier.com/v1');
+            const { accountNumber, accessToken, baseUrl } = await this.getTradierContext(userId);
+            const client = this.getClient(accessToken, baseUrl);
 
             const response = await client.delete(
-                `/accounts/${account.accountNumber}/orders/${orderId}`
+                `/accounts/${accountNumber}/orders/${orderId}`
             );
 
             logger.info(`Order cancelled successfully: ${orderId} for user: ${userId}`);
