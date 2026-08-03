@@ -20,11 +20,6 @@ import {
     TradierHistoryEvent,
     TradierClosedPosition,
 } from '../types/trading/trading-response.types';
-import {
-    TradierOrderType,
-    TradierOrderSide,
-    TradierOrderDuration,
-} from '../types/trading/trading-request.types';
 
 export class TradingService {
 
@@ -113,10 +108,13 @@ export class TradingService {
             stopPrice: raw.stop_price,
             avgFillPrice: raw.avg_fill_price,
             execQuantity: raw.exec_quantity,
+            lastFillPrice: raw.last_fill_price,
+            lastFillQuantity: raw.last_fill_quantity,
             remainingQuantity: raw.remaining_quantity,
             createDate: raw.create_date,
             transactionDate: raw.transaction_date,
             class: raw.class,
+            optionSymbol: raw.option_symbol,
         };
     }
 
@@ -131,15 +129,21 @@ export class TradingService {
     }
 
     private static normaliseHistoryEvent(raw: any): TradierHistoryEvent {
+        // Tradier nests type-specific details under a key matching the event type
+        // e.g. { type: "journal", journal: { description, quantity } }
+        //      { type: "trade", trade: { description, commission, ... } }
+        const detail = raw[raw.type] ?? {};
+
         return {
             type: raw.type,
             date: raw.date,
             amount: raw.amount,
-            description: raw.description,
-            symbol: raw.symbol,
-            quantity: raw.quantity,
-            price: raw.price,
-            tradeType: raw.trade_type,
+            description: detail.description,
+            symbol: detail.symbol ?? raw.symbol,
+            quantity: detail.quantity ?? raw.quantity,
+            price: detail.price ?? raw.price,
+            tradeType: detail.trade_type ?? raw.trade_type,
+            commission: detail.commission,
         };
     }
 
@@ -258,16 +262,11 @@ export class TradingService {
 
             // 2. Fetch user's Tradier profile
             const profileData = await this.fetchTradierProfile(tokenData.access_token);
-            console.log(profileData, 'profileData')
             const profile = profileData.profile;
-            console.log(profile, 'profile')
 
-            // 3. Get first account (users usually have one)
-            const rawAccount = Array.isArray(profile.account)
-                ? profile.account[0]
-                : profile.account;
-
-                console.log(rawAccount, 'rawAccount')
+            // 3. Get the account to connect — prefer an active one over closed
+            const accountList = Array.isArray(profile.account) ? profile.account : [profile.account];
+            const rawAccount = accountList.find(a => a.status === 'active') ?? accountList[0];
 
             // 4. Calculate token expiry
             const tokenExpiresAt = new Date(
@@ -310,7 +309,7 @@ export class TradingService {
                     accessToken: tokenData.access_token,
                     tokenScope: tokenData.scope,
                     tokenExpiresAt,
-                    environment: 'sandbox',
+                    environment: 'production',
                     isActive: true,
                 });
 
@@ -409,16 +408,15 @@ export class TradingService {
             logger.info(`Getting Tradier profile for user: ${userId}`);
 
             const account = await this.getUserTradierAccount(userId);
-            const client = this.getClient(
-                account.accessToken,
-                'https://api.tradier.com/v1'
-            );
+            const client = this.getClient(account.accessToken, 'https://api.tradier.com/v1');
 
             const response = await client.get<TradierRawProfile>('/user/profile');
             const profile = response.data.profile;
-            const rawAccount = Array.isArray(profile.account)
-                ? profile.account[0]
-                : profile.account;
+            const accountList = Array.isArray(profile.account) ? profile.account : [profile.account];
+
+            // Match the account we actually connected/stored — don't just take the first one
+            const rawAccount = accountList.find(a => a.account_number === account.accountNumber)
+                ?? accountList[0];
 
             return {
                 accountNumber: rawAccount.account_number,
@@ -453,19 +451,36 @@ export class TradingService {
 
             const b = response.data.balances;
 
+            const cashAvailable = b.cash?.cash_available
+                ?? b.margin?.stock_buying_power
+                ?? 0;
+
             return {
                 accountNumber: b.account_number,
                 accountType: b.account_type,
                 totalEquity: b.total_equity,
+                equity: b.equity,
                 totalCash: b.total_cash,
-                cashAvailable: b.cash?.cash_available ?? 0,
+                cashAvailable,
                 marketValue: b.market_value,
                 longMarketValue: b.long_market_value,
                 shortMarketValue: b.short_market_value,
+                stockLongValue: b.stock_long_value,
                 openPl: b.open_pl,
+                closePl: b.close_pl,
                 pendingCash: b.pending_cash,
                 unclearedFunds: b.uncleared_funds,
+                unsettledFunds: b.cash?.unsettled_funds,
+                sweep: b.cash?.sweep ?? b.margin?.sweep,
                 pendingOrdersCount: b.pending_orders_count,
+                currentRequirement: b.current_requirement,
+                optionRequirement: b.option_requirement,
+                optionLongValue: b.option_long_value,
+                optionShortValue: b.option_short_value,
+                optionBuyingPower: b.margin?.option_buying_power,
+                stockBuyingPower: b.margin?.stock_buying_power,
+                fedCall: b.margin?.fed_call,
+                maintenanceCall: b.margin?.maintenance_call,
                 dayTradeBuyingPower: b.pdt_information?.day_trade_buying_power,
                 numDayTrades: b.pdt_information?.num_day_trades,
             };
@@ -634,7 +649,7 @@ export class TradingService {
             params.append('quantity', String(quantity));
             params.append('type', type);
             params.append('duration', duration);
-            params.append('preview', 'true');     // ← marks this as preview
+            params.append('preview', 'true');
 
             // Limit and stop_limit orders require price
             if (price && (type === 'limit' || type === 'stop_limit')) {
@@ -660,12 +675,24 @@ export class TradingService {
                 }
             );
 
+            // Tradier returns HTTP 200 even when rejecting an order —
+            // the rejection is embedded in the body, not the status code
+            if (response.data?.errors) {
+                const tradierError = response.data.errors.error;
+                const message = Array.isArray(tradierError) ? tradierError.join(', ') : tradierError;
+                throw ApiError.badRequest(message || 'Order preview failed');
+            }
+
             logger.info(`Order preview successful for user: ${userId}`);
             return response.data;
         } catch (error: any) {
             logger.error('Preview order error', { error: error.message, userId });
             if (error.response?.status === 401) {
                 throw ApiError.unauthorized('Your Tradier session has expired. Please reconnect your account.');
+            }
+            if (error.response?.status === 400) {
+                const tradierError = error.response?.data?.errors?.error;
+                throw ApiError.badRequest(tradierError || 'Invalid order parameters');
             }
             throw error instanceof ApiError ? error : ApiError.internal('Failed to preview order');
         }
@@ -693,13 +720,13 @@ export class TradingService {
 
             // Build form-urlencoded body — REQUIRED by Tradier
             const params = new URLSearchParams();
-            params.append('class', 'equity');   // ← REQUIRED — was missing
+            params.append('class', 'equity');
             params.append('symbol', symbol.toUpperCase());
             params.append('side', side);
             params.append('quantity', String(quantity));
             params.append('type', type);
             params.append('duration', duration);
-            // No preview field here — this is a real order
+            // params.append('preview', 'true'); ONLY FOR PREVIEW
 
             // Limit and stop_limit orders require price
             if (price && (type === 'limit' || type === 'stop_limit')) {
@@ -729,6 +756,14 @@ export class TradingService {
 
             console.log(response, 'response')
 
+            // Tradier returns HTTP 200 even when rejecting an order —
+            // check the body for embedded errors before declaring success
+            if (response.data?.errors) {
+                const tradierError = response.data.errors.error;
+                const message = Array.isArray(tradierError) ? tradierError.join(', ') : tradierError;
+                throw ApiError.badRequest(message || 'Order placement failed');
+            }
+
             logger.info(`Order placed successfully for user: ${userId}, order: ${JSON.stringify(response.data)}`);
             return response.data;
         } catch (error: any) {
@@ -737,7 +772,6 @@ export class TradingService {
                 throw ApiError.unauthorized('Your Tradier session has expired. Please reconnect your account.');
             }
             if (error.response?.status === 400) {
-                // Tradier returns validation errors as 400
                 const tradierError = error.response?.data?.errors?.error;
                 throw ApiError.badRequest(tradierError || 'Invalid order parameters');
             }
@@ -757,8 +791,6 @@ export class TradingService {
 
             const response = await client.get(`/accounts/${account.accountNumber}/orders`);
 
-            console.log(response, 'Response')
-
             // Tradier returns "null" as a string when no orders exist
             // Normalize this to an empty array
             const orders = response.data?.orders;
@@ -776,7 +808,8 @@ export class TradingService {
                 : [];
 
             logger.info(`Orders retrieved for user: ${userId}`);
-            return { orders: orderList };
+            return { orders: orderList.map(this.normaliseOrder) };
+
         } catch (error: any) {
             logger.error('Get orders error:', error.message);
             throw error instanceof ApiError ? error : ApiError.internal('Failed to get orders');
@@ -791,8 +824,6 @@ export class TradingService {
             logger.info(`Getting order: ${orderId} for user: ${userId}`);
 
             const account = await this.getUserTradierAccount(userId);
-
-            // Always use production URL for trading
             const client = this.getClient(account.accessToken, 'https://api.tradier.com/v1');
 
             const response = await client.get(
@@ -800,7 +831,7 @@ export class TradingService {
             );
 
             logger.info(`Order retrieved: ${orderId} for user: ${userId}`);
-            return response.data;
+            return this.normaliseOrder(response.data.order);
         } catch (error: any) {
             logger.error('Get order error', { error: error.message, userId, orderId });
             if (error.response?.status === 401) {

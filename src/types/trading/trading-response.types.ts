@@ -40,22 +40,37 @@ export interface TradierRawBalances {
     balances: {
         account_number: string;
         account_type: string;
-        cash: {
+        total_equity: number;
+        equity: number;
+        total_cash: number;
+        close_pl: number;
+        current_requirement: number;
+        long_market_value: number;
+        market_value: number;
+        short_market_value: number;
+        stock_long_value: number;
+        open_pl: number;
+        option_long_value: number;
+        option_short_value: number;
+        option_requirement: number;
+        pending_orders_count: number;
+        pending_cash: number;
+        uncleared_funds: number;
+        // Cash accounts only
+        cash?: {
             cash_available: number;
             sweep: number;
             unsettled_funds: number;
         };
-        equity: number;
-        long_market_value: number;
-        market_value: number;
-        open_pl: number;
-        option_requirement: number;
-        pending_cash: number;
-        short_market_value: number;
-        total_cash: number;
-        total_equity: number;
-        uncleared_funds: number;
-        pending_orders_count: number;
+        // Margin accounts only
+        margin?: {
+            fed_call: number;
+            maintenance_call: number;
+            option_buying_power: number;
+            stock_buying_power: number;
+            stock_short_value: number;
+            sweep: number;
+        };
         pdt_information?: {
             day_trade_buying_power: number;
             num_day_trades: number;
@@ -98,6 +113,7 @@ export interface TradierRawOrder {
     transaction_date: string;
     class: string;
     num_legs?: number;
+    option_symbol?: string;
 }
 
 export interface TradierRawOrders {
@@ -208,15 +224,28 @@ export interface TradierBalancesResponse {
         accountNumber: string;
         accountType: string;
         totalEquity: number;
+        equity: number;
         totalCash: number;
         cashAvailable: number;
         marketValue: number;
         longMarketValue: number;
         shortMarketValue: number;
+        stockLongValue: number;
         openPl: number;
+        closePl: number;
         pendingCash: number;
         unclearedFunds: number;
+        unsettledFunds?: number;
+        sweep?: number;
         pendingOrdersCount: number;
+        currentRequirement: number;
+        optionRequirement: number;
+        optionLongValue: number;
+        optionShortValue: number;
+        optionBuyingPower?: number;
+        stockBuyingPower?: number;
+        fedCall?: number;
+        maintenanceCall?: number;
         dayTradeBuyingPower?: number;
         numDayTrades?: number;
     };
@@ -248,10 +277,13 @@ export interface TradierOrder {
     stopPrice?: number;
     avgFillPrice: number;
     execQuantity: number;
+    lastFillPrice?: number;
+    lastFillQuantity?: number;
     remainingQuantity: number;
     createDate: string;
     transactionDate: string;
     class: string;
+    optionSymbol?: string;
 }
 
 export interface TradierOrdersResponse {
@@ -296,11 +328,12 @@ export interface TradierHistoryEvent {
     type: string;
     date: string;
     amount: number;
-    description: string;
+    description?: string;
     symbol?: string;
     quantity?: number;
     price?: number;
     tradeType?: string;
+    commission?: number;
 }
 
 export interface TradierHistoryResponse {

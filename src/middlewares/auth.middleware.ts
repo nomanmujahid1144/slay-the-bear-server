@@ -4,6 +4,9 @@ import { ApiError } from '../utils/ApiError';
 import { JWTUtil } from '../utils/jwt';
 import { Plan } from '../constants/enums';
 import { logger } from '../utils/logger';
+import { db } from '../db';
+import { users } from '../db/schema';
+import { eq } from 'drizzle-orm';
 
 /**
  * Middleware to authenticate requests using JWT
@@ -52,17 +55,19 @@ export const authenticate = async (
 /**
  * Middleware to check if user has premium plan
  */
-export const requirePremium = async (
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-) => {
+export const requirePremium = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    if (!req.user) {
+    if (!req.user?.id) {
       throw ApiError.unauthorized('Authentication required');
     }
 
-    if (req.user.plan !== Plan.PREMIUM) {
+    const existingUser = await db
+      .select({ plan: users.plan })
+      .from(users)
+      .where(eq(users.id, req.user.id))
+      .limit(1);
+
+    if (existingUser.length === 0 || existingUser[0].plan !== 'premium') {
       throw ApiError.forbidden('Premium subscription required');
     }
 

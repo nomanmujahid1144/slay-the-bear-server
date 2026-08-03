@@ -8,6 +8,7 @@ import {
   forgotPasswordSchema,
   verifyResetTokenSchema,
   changePasswordSchema,
+  resendOTPSchema,
   // refreshTokenSchema,
 } from '../validators/auth.validator';
 
@@ -29,10 +30,17 @@ router.post('/login', validate(loginSchema), AuthController.login);
 
 /**
  * @route   POST /api/auth/verify-email
- * @desc    Verify email with token
+ * @desc    Verify email with OTP and auto sign-in
  * @access  Public
  */
 router.post('/verify-email', validate(verifyEmailSchema), AuthController.verifyEmail);
+
+/**
+ * @route   POST /api/auth/resend-otp
+ * @desc    Resend verification OTP
+ * @access  Public
+ */
+router.post('/resend-otp', validate(resendOTPSchema), AuthController.resendOTP);
 
 /**
  * @route   POST /api/auth/forgot-password

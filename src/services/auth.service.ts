@@ -85,7 +85,7 @@ export class AuthService {
         })
         .returning();
 
-        console.log(newUser, 'newUser')
+      console.log(newUser, 'newUser')
 
       // Apply referral code if provided
       if (referralCode) {
@@ -138,7 +138,7 @@ export class AuthService {
 
       if (!user.isVerified) {
         logger.warn(`Login failed - user not verified: ${email}`);
-        throw ApiError.badRequest('Please verify first, or signup again');
+        throw ApiError.forbidden('Please verify your email to continue');
       }
 
       const tokens = JWTUtil.generateTokenPair({
@@ -173,26 +173,27 @@ export class AuthService {
   }
 
   /**
-   * Verify Email with Token
-   * Converts: /api/users/verifyemail
-   */
-  static async verifyEmail(token: string): Promise<{ message: string }> {
+     * Verify Email with OTP
+     * Converts: /api/users/verifyemail
+     */
+  static async verifyEmail(email: string, otp: string): Promise<AuthResponse & { message: string }> {
     try {
-      logger.info('Email verification attempt');
+      logger.info(`Email verification attempt for: ${email}`);
 
       const existingUser = await db
         .select()
         .from(users)
         .where(
           and(
-            eq(users.verifyToken, token),
+            eq(users.email, email),
+            eq(users.verifyToken, otp),
             gt(users.verifyTokenExpiry, new Date())
           )
         )
         .limit(1);
 
       if (existingUser.length === 0) {
-        throw ApiError.badRequest('Token is expired. Please sign-up and try again');
+        throw ApiError.badRequest('Invalid or expired code. Please request a new one.');
       }
 
       const user = existingUser[0];
@@ -209,13 +210,84 @@ export class AuthService {
       // Complete referral
       await ReferralService.completeReferral(user.id);
 
-      logger.info(`Email verified successfully: ${user.email}`);
+      // Auto sign-in after successful verification
+      const tokens = JWTUtil.generateTokenPair({
+        id: user.id,
+        email: user.email,
+        plan: user.plan as Plan,
+      });
+
+      const {
+        password: _,
+        verifyToken,
+        verifyTokenExpiry,
+        forgotPasswordToken,
+        forgotPasswordTokenExpiry,
+        customerId,
+        ...userWithoutPassword
+      } = user;
+
+      logger.info(`Email verified and user signed in: ${user.email}`);
 
       return {
         message: 'User verified',
+        user: {
+          ...userWithoutPassword,
+          isVerified: true,
+          plan: user.plan as Plan,
+        },
+        tokens,
       };
     } catch (error: any) {
       logger.error('Email verification error', { error: error.message });
+      throw error instanceof ApiError ? error : ApiError.internal(error.message);
+    }
+  }
+
+  /**
+   * Resend Verification OTP
+   * Rate limited: one code per 60 seconds
+   */
+  static async resendOTP(email: string): Promise<{ message: string }> {
+    try {
+      logger.info(`Resend OTP request for: ${email}`);
+
+      const existingUser = await db
+        .select()
+        .from(users)
+        .where(eq(users.email, email))
+        .limit(1);
+
+      if (existingUser.length === 0) {
+        throw ApiError.badRequest('No account found with this email address.');
+      }
+
+      const user = existingUser[0];
+
+      if (user.isVerified) {
+        throw ApiError.badRequest('This account is already verified. Please log in.');
+      }
+
+      // Rate limit: OTP expiry is 10 minutes, so lastSentAt = expiry - 10 minutes
+      if (user.verifyTokenExpiry) {
+        const lastSentAt = new Date(user.verifyTokenExpiry.getTime() - 10 * 60 * 1000);
+        const secondsSinceLastSent = (Date.now() - lastSentAt.getTime()) / 1000;
+
+        if (secondsSinceLastSent < 60) {
+          const waitSeconds = Math.ceil(60 - secondsSinceLastSent);
+          throw ApiError.badRequest(`Please wait ${waitSeconds} seconds before requesting a new code.`);
+        }
+      }
+
+      await EmailService.sendVerificationEmail(email, user.id, user.firstName);
+
+      logger.info(`Verification OTP resent to: ${email}`);
+
+      return {
+        message: 'A new verification code has been sent to your email',
+      };
+    } catch (error: any) {
+      logger.error('Resend OTP error', { error: error.message, email });
       throw error instanceof ApiError ? error : ApiError.internal(error.message);
     }
   }

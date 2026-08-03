@@ -10,6 +10,7 @@ import { VerificationEmail } from '../emails/VerificationEmail';
 import { ResetPassword } from '../emails/ResetPassword';
 import { MessageOnPasswordChange } from '../emails/MessageOnPasswordChange';
 import { JSX } from 'react';
+import { OTPUtil } from '../utils/otp';
 
 // Initialize Resend
 const resend = new Resend(config.RESEND_API_KEY);
@@ -40,20 +41,21 @@ export class EmailService {
 
       // Generate token and update user based on email type
       if (emailType === 'VERIFY') {
-        // Generate verification token
-        hashedToken = await PasswordUtil.generateToken(userId);
+        // Generate 6-digit OTP with 10-minute expiry
+        const otp = OTPUtil.generate();
+        const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
 
         // Update user with verification token
         await db
           .update(users)
           .set({
-            verifyToken: hashedToken,
-            verifyTokenExpiry: expiryDate,
+            verifyToken: otp,
+            verifyTokenExpiry: otpExpiry,
           })
           .where(eq(users.id, userId));
 
-        subject = `${username}, Please verify your email address`;
-        body = VerificationEmail({ username, hashedToken });
+        subject = `${username}, ${otp} is your Slaythebear verification code`;
+        body = VerificationEmail({ username, otp });
       } else if (emailType === 'RESET') {
         // Generate password reset token
         hashedToken = await PasswordUtil.generateToken(userId);

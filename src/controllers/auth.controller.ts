@@ -72,16 +72,54 @@ export class AuthController {
   }
 
   /**
-   * POST /api/auth/verify-email
-   * Verify email with token
-   */
+     * POST /api/auth/verify-email
+     * Verify email with OTP and auto sign-in
+     */
   static async verifyEmail(req: Request, res: Response, next: NextFunction) {
     try {
-      const { token } = req.body;
+      const { email, otp } = req.body;
 
-      logger.info('Email verification request received');
+      logger.info(`Email verification request received for: ${email}`);
 
-      const result = await AuthService.verifyEmail(token);
+      const result = await AuthService.verifyEmail(email, otp);
+
+      // Set HttpOnly cookies (auto sign-in)
+      res.cookie('accessToken', result.tokens.accessToken, {
+        httpOnly: true,
+        secure: config.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 15 * 60 * 1000,
+      });
+
+      res.cookie('refreshToken', result.tokens.refreshToken, {
+        httpOnly: true,
+        secure: config.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      });
+
+      return ApiResponseUtil.success(
+        res,
+        { user: result.user, tokens: result.tokens },
+        result.message,
+        200
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/auth/resend-otp
+   * Resend verification OTP
+   */
+  static async resendOTP(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { email } = req.body;
+
+      logger.info(`Resend OTP request for: ${email}`);
+
+      const result = await AuthService.resendOTP(email);
 
       return ApiResponseUtil.success(
         res,

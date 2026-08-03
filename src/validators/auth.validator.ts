@@ -66,7 +66,18 @@ export const loginSchema = z.object({
 // Verify Email Schema
 export const verifyEmailSchema = z.object({
   body: z.object({
-    token: z.string().min(1, 'Token is required'),
+    email: emailValidation,
+    otp: z
+      .string()
+      .length(6, 'Code must be 6 digits')
+      .regex(/^\d{6}$/, 'Code must contain only numbers'),
+  }),
+});
+
+// Resend OTP Schema
+export const resendOTPSchema = z.object({
+  body: z.object({
+    email: emailValidation,
   }),
 });
 
@@ -113,6 +124,7 @@ export type SignUpInput = z.infer<typeof signUpSchema>['body'];
 export type UpdateProfileSchemaInput = z.infer<typeof updateProfileSchema>['body'];
 export type LoginInput = z.infer<typeof loginSchema>['body'];
 export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>['body'];
+export type ResendOTPInput = z.infer<typeof resendOTPSchema>['body'];
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>['body'];
 export type VerifyResetTokenInput = z.infer<typeof verifyResetTokenSchema>['body'];
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>['body'];
