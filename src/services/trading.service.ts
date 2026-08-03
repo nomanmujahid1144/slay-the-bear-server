@@ -101,6 +101,8 @@ export class TradingService {
 
         const useSandbox = config.TRADIER_MODE === 'sandbox' || config.NODE_ENV === 'development';
 
+        console.log(useSandbox, 'Tradier Mode')
+
         if (useSandbox) {
             // Sandbox testing account — hardcoded for dev/testing only.
             // Sandbox MUST use sandbox.tradier.com, not api.tradier.com.
