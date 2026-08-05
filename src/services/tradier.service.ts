@@ -33,7 +33,7 @@ export class TradierService {
       logger.info(`Fetching quotes for: ${symbolsParam}`);
 
       const response = await axios.get<QuotesResponse>(
-        `${config.TRADIER_API_URL}/markets/quotes`,
+        `${config.TRADIER_SANDBOX_URL}/markets/quotes`,
         {
           params: { symbols: symbolsParam, greeks: false },
           headers: {
@@ -86,7 +86,7 @@ export class TradierService {
       if (end) params.end = end;
 
       const response = await axios.get<HistoryResponse>(
-        `${config.TRADIER_API_URL}/markets/history`,
+        `${config.TRADIER_SANDBOX_URL}/markets/history`,
         {
           params,
           headers: {
@@ -144,7 +144,7 @@ export class TradierService {
       if (end) params.end = end;
 
       const response = await axios.get<TimeSalesResponse>(
-        `${config.TRADIER_API_URL}/markets/timesales`,
+        `${config.TRADIER_SANDBOX_URL}/markets/timesales`,
         {
           params,
           headers: {
@@ -193,8 +193,8 @@ export class TradierService {
     try {
       logger.info(`Searching symbols for: ${query}`);
 
-      const response = await axios.get<SearchResponse>(
-        `${config.TRADIER_API_URL}/markets/search`,
+      const response = await axios.get<SearchResponse>( 
+        `${config.TRADIER_SANDBOX_URL}/markets/search`,
         {
           params: { q: query, indexes },
           headers: {
