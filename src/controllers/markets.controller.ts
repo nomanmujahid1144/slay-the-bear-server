@@ -10,7 +10,7 @@ import { logger } from '../utils/logger';
  * Handles HTTP requests for market data endpoints
  */
 export class MarketsController {
-  
+
   /**
    * GET /api/markets/quotes
    * Get real-time quotes for symbols
@@ -18,7 +18,7 @@ export class MarketsController {
   static async getQuotes(req: Request, res: Response, next: NextFunction) {
     try {
       const { symbols } = req.query;
-      
+
       // Split comma-separated symbols
       const symbolsArray = (symbols as string).split(',').map(s => s.trim());
 
@@ -97,25 +97,39 @@ export class MarketsController {
    * GET /api/markets/search
    * Search for symbols by company name or symbol
    */
+  // static async searchSymbols(req: Request, res: Response, next: NextFunction) {
+  //   try {
+  //     const { q, indexes } = req.query;
+
+  //     logger.info(`Search symbols request for: ${q}`);
+
+  //     const securities = await TradierService.searchSymbols(
+  //       q as string,
+  //       indexes === 'true'
+  //     );
+
+  //     return ApiResponseUtil.success(
+  //       res,
+  //       securities,
+  //       'Securities retrieved successfully',
+  //       200
+  //     );
+  //   } catch (error) {
+  //     next(error);
+  //   }
+  // }
+
   static async searchSymbols(req: Request, res: Response, next: NextFunction) {
     try {
-      const { q, indexes } = req.query;
-
+      const { q } = req.query;
       logger.info(`Search symbols request for: ${q}`);
 
-      const securities = await TradierService.searchSymbols(
-        q as string,
-        indexes === 'true'
-      );
+      const securities = await TradierService.searchSymbolsAlphaVantage(q as string);
 
-      return ApiResponseUtil.success(
-        res,
-        securities,
-        'Securities retrieved successfully',
-        200
-      );
+      return ApiResponseUtil.success(res, securities, 'Securities retrieved successfully', 200);
     } catch (error) {
       next(error);
     }
   }
+
 }

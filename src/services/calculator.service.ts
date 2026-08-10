@@ -884,7 +884,12 @@ export class CalculatorService {
       const covMatrix = this.calculateCovarianceMatrix(returns);
       const portVol = this.portfolioVolatility(weights, returns);
       const portReturn = this.portfolioReturn(weights, returns);
-      const shortfall = Math.max(0, effectiveTarget - portReturn);
+
+      // Two-sided deviation — pulls the portfolio toward the target
+      // return from EITHER direction, not just when falling short.
+      // This is the fix: previously only under-shooting was penalized,
+      // so a low target had zero effect once the natural return exceeded it.
+      const deviation = portReturn - effectiveTarget;
 
       // Volatility gradient: d(vol)/d(w_i)
       const volGrad = new Array(numAssets).fill(0);
@@ -895,9 +900,11 @@ export class CalculatorService {
         volGrad[i] /= (portVol + 1e-10);
       }
 
-      // Return penalty gradient: d(penalty)/d(w_i)
+      // Return penalty gradient: d((return-target)^2)/d(w_i)
+      // Positive deviation (overshooting) now pulls weights DOWN toward
+      // lower-return assets; negative deviation (undershooting) pulls UP.
       const retGrad = meanReturns.map(r =>
-        -2 * RETURN_PENALTY * decayFactor * shortfall * r
+        2 * RETURN_PENALTY * decayFactor * deviation * r
       );
 
       // Combined update

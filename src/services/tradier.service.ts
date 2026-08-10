@@ -20,7 +20,7 @@ import type {
  * Handles all Tradier API calls for market data
  */
 export class TradierService {
-  
+
   /**
    * Get real-time quotes for one or more symbols
    * @param symbols - Array of stock/ETF symbols (e.g., ['AAPL', 'TSLA'])
@@ -29,7 +29,7 @@ export class TradierService {
   static async getQuotes(symbols: string[]): Promise<Quote[]> {
     try {
       const symbolsParam = symbols.join(',');
-      
+
       logger.info(`Fetching quotes for: ${symbolsParam}`);
 
       const response = await axios.get<QuotesResponse>(
@@ -48,18 +48,18 @@ export class TradierService {
       const quotes = Array.isArray(quotesData) ? quotesData : [quotesData];
 
       logger.info(`Successfully fetched ${quotes.length} quotes`);
-      
+
       return quotes;
     } catch (error: any) {
-      logger.error('Tradier getQuotes error', { 
+      logger.error('Tradier getQuotes error', {
         error: error.message,
         symbols,
       });
-      
+
       if (error.response?.status === 401) {
         throw ApiError.unauthorized('Invalid Tradier API token');
       }
-      
+
       throw ApiError.internal('Failed to fetch market quotes');
     }
   }
@@ -105,19 +105,19 @@ export class TradierService {
       const history = Array.isArray(historyData) ? historyData : [historyData];
 
       logger.info(`Successfully fetched ${history.length} history records`);
-      
+
       return history;
     } catch (error: any) {
-      logger.error('Tradier getHistory error', { 
+      logger.error('Tradier getHistory error', {
         error: error.message,
         symbol,
         interval,
       });
-      
+
       if (error.response?.status === 401) {
         throw ApiError.unauthorized('Invalid Tradier API token');
       }
-      
+
       throw ApiError.internal('Failed to fetch historical data');
     }
   }
@@ -163,23 +163,24 @@ export class TradierService {
       const timesales = Array.isArray(seriesData) ? seriesData : [seriesData];
 
       logger.info(`Successfully fetched ${timesales.length} time & sales records`);
-      
+
       return timesales;
     } catch (error: any) {
-      logger.error('Tradier getTimeSales error', { 
+      logger.error('Tradier getTimeSales error', {
         error: error.message,
         symbol,
         interval,
       });
-      
+
       if (error.response?.status === 401) {
         throw ApiError.unauthorized('Invalid Tradier API token');
       }
-      
+
       throw ApiError.internal('Failed to fetch time & sales data');
     }
   }
 
+  // Search Symbol with Tradier
   /**
    * Search for symbols by company name or symbol
    * @param query - Search query (e.g., 'Apple' or 'AAPL')
@@ -193,7 +194,7 @@ export class TradierService {
     try {
       logger.info(`Searching symbols for: ${query}`);
 
-      const response = await axios.get<SearchResponse>( 
+      const response = await axios.get<SearchResponse>(
         `${config.TRADIER_SANDBOX_URL}/markets/search`,
         {
           params: { q: query, indexes },
@@ -215,20 +216,60 @@ export class TradierService {
       const securities = Array.isArray(securitiesData) ? securitiesData : [securitiesData];
 
       logger.info(`Successfully found ${securities.length} securities`);
-      
+
       return securities;
     } catch (error: any) {
       console.log(error, 'error')
-      logger.error('Tradier searchSymbols error', { 
+      logger.error('Tradier searchSymbols error', {
         error: error.message,
         query,
       });
-      
+
       if (error.response?.status === 401) {
         throw ApiError.unauthorized('Invalid Tradier API token');
       }
-      
+
       throw ApiError.internal('Failed to search symbols');
     }
   }
+
+  /**
+   * Search for symbols using Alpha Vantage — Tradier's sandbox search
+   * index is too limited (missing major tickers like GOOGL, SPY, QQQ).
+   */
+  static async searchSymbolsAlphaVantage(query: string): Promise<Security[]> {
+    try {
+      logger.info(`Searching symbols via Alpha Vantage for: ${query}`);
+
+      const response = await axios.get('https://www.alphavantage.co/query', {
+        params: {
+          function: 'SYMBOL_SEARCH',
+          keywords: query,
+          apikey: config.ALPHA_VANTAGE_API_KEY,
+        },
+      });
+
+      if (response.data['Error Message']) {
+        logger.error('Alpha Vantage error', { error: response.data['Error Message'], query });
+        return [];
+      }
+
+      const matches = response.data['bestMatches'] ?? [];
+      const securities: Security[] = matches
+        .filter((item: Record<string, string>) => item['4. region'] === 'United States')
+        .map((item: Record<string, string>) => ({
+          symbol: item['1. symbol'],
+          exchange: item['4. region'],
+          type: item['3. type']?.toLowerCase() ?? 'stock',
+          description: item['2. name'],
+        }));
+
+      logger.info(`Found ${securities.length} securities for: ${query}`);
+      return securities;
+    } catch (error: any) {
+      logger.error('Alpha Vantage searchSymbols error', { error: error.message, query });
+      throw ApiError.internal('Failed to search symbols');
+    }
+  }
+
 }
