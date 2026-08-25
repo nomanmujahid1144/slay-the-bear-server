@@ -1,29 +1,30 @@
 import jwt, { SignOptions } from 'jsonwebtoken';
+import crypto from 'crypto';
 import config from '../config';
 import { JWTPayload, TokenResponse } from '../types';
 import { ApiError } from './ApiError';
 
 export class JWTUtil {
     // Generate access token (short-lived)
-    static generateAccessToken(payload: JWTPayload): string {
+    static generateAccessToken(payload: Omit<JWTPayload, 'jti'>): string {
         return jwt.sign(
-            payload,
+            { ...payload, jti: crypto.randomUUID() },
             config.JWT_ACCESS_SECRET,
             { expiresIn: config.JWT_ACCESS_EXPIRY } as jwt.SignOptions
         );
     }
 
     // Generate refresh token (long-lived)
-    static generateRefreshToken(payload: JWTPayload): string {
+    static generateRefreshToken(payload: Omit<JWTPayload, 'jti'>): string {
         return jwt.sign(
-            payload,
+            { ...payload, jti: crypto.randomUUID() },
             config.JWT_REFRESH_SECRET,
             { expiresIn: config.JWT_REFRESH_EXPIRY } as jwt.SignOptions
         );
     }
 
     // Generate both access and refresh tokens
-    static generateTokenPair(payload: JWTPayload): TokenResponse {
+    static generateTokenPair(payload: Omit<JWTPayload, 'jti'>): TokenResponse {
         return {
             accessToken: this.generateAccessToken(payload),
             refreshToken: this.generateRefreshToken(payload),

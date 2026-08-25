@@ -1,11 +1,14 @@
 import { Plan } from '../../constants/enums';
 
-// JWT Payload
+// JWT Payload — cross-server contract with the AI backend (Server A)
 export interface JWTPayload {
-  id: string;
+  sub: string;
   email: string;
   plan: Plan;
+  role: string;
+  jti: string;
 }
+
 
 // Token Response
 export interface TokenResponse {

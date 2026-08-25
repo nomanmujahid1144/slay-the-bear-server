@@ -39,12 +39,12 @@ export const authenticate = async (
 
     // Attach user to request
     req.user = {
-      id: payload.id,
+      id: payload.sub,
       email: payload.email,
       plan: payload.plan,
     };
 
-    logger.debug('User authenticated', { userId: payload.id });
+    logger.debug('User authenticated', { userId: payload.sub });
 
     next();
   } catch (error) {
@@ -120,7 +120,7 @@ export const optionalAuth = async (
       if (token) {
         const payload = JWTUtil.verifyAccessToken(token);
         req.user = {
-          id: payload.id,
+          id: payload.sub,
           email: payload.email,
           plan: payload.plan,
         };

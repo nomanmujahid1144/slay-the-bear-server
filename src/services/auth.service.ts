@@ -142,9 +142,10 @@ export class AuthService {
       }
 
       const tokens = JWTUtil.generateTokenPair({
-        id: user.id,
+        sub: user.id,
         email: user.email,
         plan: user.plan as Plan,
+        role: 'user',
       });
 
       const {
@@ -212,9 +213,10 @@ export class AuthService {
 
       // Auto sign-in after successful verification
       const tokens = JWTUtil.generateTokenPair({
-        id: user.id,
+        sub: user.id,
         email: user.email,
         plan: user.plan as Plan,
+        role: 'user'
       });
 
       const {
@@ -440,12 +442,13 @@ export class AuthService {
 
       // Generate new access token
       const accessToken = JWTUtil.generateAccessToken({
-        id: payload.id,
+        sub: payload.sub,
         email: payload.email,
         plan: payload.plan,
+        role: payload.role ?? 'user',
       });
 
-      logger.info(`Token refreshed successfully for user: ${payload.id}`);
+      logger.info(`Token refreshed successfully for user: ${payload.sub}`);
 
       return {
         accessToken,
