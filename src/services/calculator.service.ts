@@ -975,13 +975,13 @@ export class CalculatorService {
     try {
 
       const alpha = require('alphavantage')({ key: apiKey });
-      const data = await alpha.data.monthly_adjusted(symbol);
+      const data = await alpha.data.weekly_adjusted(symbol);
 
-      if (!data['Monthly Adjusted Time Series']) {
-        throw new Error(`No monthly time series data for ${symbol}`);
+      if (!data['Weekly Adjusted Time Series']) {
+        throw new Error(`No weekly time series data for ${symbol}`);
       }
 
-      const prices = Object.entries(data['Monthly Adjusted Time Series'])
+      const prices = Object.entries(data['Weekly Adjusted Time Series'])
         .map(([date, values]: [string, any]) => ({
           date: new Date(date),
           price: parseFloat(values['5. adjusted close']),
@@ -990,12 +990,12 @@ export class CalculatorService {
         .filter((item) => item.date >= new Date(Date.now() - 5 * 365 * 24 * 60 * 60 * 1000))
         .map((entry) => entry.price);
 
-      if (prices.length < 60) {
-        const padding = Array(60 - prices.length).fill(prices[0] || 0);
+      if (prices.length < 260) {
+        const padding = Array(260 - prices.length).fill(prices[0] || 0);
         return [...padding, ...prices];
       }
 
-      return prices.slice(-60);
+      return prices.slice(-260);
     } catch (error) {
       console.error(`Error in getStockData for ${symbol}:`, error);
       throw new Error(`Failed to fetch data for ${symbol}: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -1023,20 +1023,17 @@ export class CalculatorService {
   }
 
   private static portfolioReturn(weights: number[], returns: number[][]) {
-    // Calculate mean returns for each asset
     const meanReturns = returns.map(assetReturns => {
       return assetReturns.reduce((sum, val) => sum + val, 0) / assetReturns.length;
     });
 
-    // Calculate weighted sum
     const weightedSum = meanReturns.reduce((sum, ret, i) => sum + ret * weights[i], 0);
-    return weightedSum * 12; // Annualized
+    return weightedSum * 52; // Annualized — weekly returns × 52 weeks/year
   }
 
   private static portfolioVolatility(weights: number[], returns: number[][]) {
     const covMatrix = this.calculateCovarianceMatrix(returns);
 
-    // Manual matrix multiplication: weights * covMatrix * weights
     let sum = 0;
     for (let i = 0; i < weights.length; i++) {
       for (let j = 0; j < weights.length; j++) {
@@ -1044,7 +1041,7 @@ export class CalculatorService {
       }
     }
 
-    return Math.sqrt(sum) * Math.sqrt(12); // Annualized
+    return Math.sqrt(sum) * Math.sqrt(52); // Annualized — weekly vol × √52
   }
 
   private static calculateVaR(volatility: number, timePeriod = 1) {
@@ -1070,9 +1067,9 @@ export class CalculatorService {
       totalValue += weights[i] * investmentAmount * growthFactor;
     }
 
-    // 60 monthly prices ≈ 5 years
-    const months = prices[0].length - 1;
-    const years = months / 12;
+    // 260 weekly prices ≈ 5 years
+    const periods = prices[0].length - 1;
+    const years = periods / 52;
     const annualizedReturn = Math.pow(totalValue / investmentAmount, 1 / years) - 1;
 
     return { totalValue, annualizedReturn, years };
