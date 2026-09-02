@@ -34,7 +34,7 @@ export class JWTUtil {
     // Verify access token
     static verifyAccessToken(token: string): JWTPayload {
         try {
-            return jwt.verify(token, config.JWT_ACCESS_SECRET) as JWTPayload;
+            return jwt.verify(token, config.JWT_ACCESS_SECRET, { algorithms: ['HS256'] }) as JWTPayload;
         } catch (error) {
             if (error instanceof jwt.TokenExpiredError) {
                 throw ApiError.unauthorized('Access token has expired');
@@ -49,7 +49,7 @@ export class JWTUtil {
     // Verify refresh token
     static verifyRefreshToken(token: string): JWTPayload {
         try {
-            return jwt.verify(token, config.JWT_REFRESH_SECRET) as JWTPayload;
+            return jwt.verify(token, config.JWT_REFRESH_SECRET, { algorithms: ['HS256'] }) as JWTPayload;
         } catch (error) {
             if (error instanceof jwt.TokenExpiredError) {
                 throw ApiError.unauthorized('Refresh token has expired');

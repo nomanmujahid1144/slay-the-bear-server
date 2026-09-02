@@ -7,6 +7,8 @@ export interface JWTPayload {
   plan: Plan;
   role: string;
   jti: string;
+  iat?: number;
+  exp?: number;
 }
 
 

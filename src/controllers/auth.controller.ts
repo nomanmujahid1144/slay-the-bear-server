@@ -5,6 +5,8 @@ import { logger } from '../utils/logger';
 import type { AuthRequest } from '../types';
 import config from '../config';
 import { ApiError } from '../utils/ApiError';
+import { JWTUtil } from '../utils/jwt';
+import { RevocationService } from '../utils/redis';
 
 /**
  * Auth Controller - Handles HTTP requests for authentication
@@ -249,6 +251,16 @@ export class AuthController {
     try {
       logger.info('Logout request');
 
+      // Revoke this specific token so Server A rejects it immediately,
+      // instead of waiting for natural expiry.
+      const token = req.cookies?.accessToken || req.headers.authorization?.split(' ')[1];
+      if (token) {
+        const payload = JWTUtil.decode(token);
+        if (payload?.jti && payload?.exp) {
+          await RevocationService.revokeToken(payload.jti, payload.exp);
+        }
+      }
+
       // Clear cookies
       res.clearCookie('accessToken');
       res.clearCookie('refreshToken');
@@ -262,6 +274,30 @@ export class AuthController {
         'Logged out successfully',
         200
       );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+
+  /**
+ * POST /api/auth/logout-all
+ * Revoke ALL of the user's tokens (logout from every device)
+ */
+  static async logoutAll(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user?.id) {
+        throw ApiError.unauthorized('Authentication required');
+      }
+
+      logger.info(`Logout-all request for user: ${req.user.id}`);
+
+      await RevocationService.revokeAllForUser(req.user.id);
+
+      res.clearCookie('accessToken');
+      res.clearCookie('refreshToken');
+
+      return ApiResponseUtil.success(res, undefined, 'Logged out of all devices successfully', 200);
     } catch (error) {
       next(error);
     }

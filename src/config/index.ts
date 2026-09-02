@@ -11,6 +11,9 @@ interface Config {
     // Database
     DATABASE_URL: string;
 
+    // AI Server Url
+    AI_SERVER_URL: string,
+
     // Supabase
     SUPABASE_URL: string,
     SUPABASE_SERVICE_KEY: string,
@@ -66,6 +69,7 @@ interface Config {
     // Redis (Upstash)
     UPSTASH_REDIS_REST_URL: string;
     UPSTASH_REDIS_REST_TOKEN: string;
+    AUTH_REDIS_URL: string;
 
     // Frontend
     FRONTEND_URL: string;
@@ -81,6 +85,9 @@ const config: Config = {
 
     // Database
     DATABASE_URL: process.env.DATABASE_URL || '',
+
+    // AI Server Url
+    AI_SERVER_URL: process.env.AI_SERVER_URL || '',
 
     // Supabase
     SUPABASE_URL: process.env.SUPABASE_URL || '',
@@ -137,6 +144,7 @@ const config: Config = {
     // Redis (Upstash)
     UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL || '',
     UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN || '',
+    AUTH_REDIS_URL: process.env.AUTH_REDIS_URL || '',
 
     // Frontend
     FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:3000',

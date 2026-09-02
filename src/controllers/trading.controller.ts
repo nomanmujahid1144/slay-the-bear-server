@@ -26,7 +26,7 @@ export class TradingController {
 
             logger.info(`Tradier connect request for user: ${userId}`);
 
-            const authUrl = TradingService.getAuthorizationUrl(userId);
+            const authUrl = TradingService.getAuthorizationUrl(userId as string);
 
             return res.redirect(authUrl);
         } catch (error) {
@@ -42,7 +42,7 @@ export class TradingController {
         try {
             const userId = req.params.userId;
 
-            const authUrl = TradingService.getAuthorizationUrl(userId);
+            const authUrl = TradingService.getAuthorizationUrl(userId as string);
 
             return res.redirect(authUrl);
         } catch (error) {
@@ -270,12 +270,12 @@ export class TradingController {
      */
     static async getOrder(req: AuthRequest, res: Response, next: NextFunction) {
         try {
-            const userId   = req.user?.id!;
+            const userId = req.user?.id!;
             const { orderId } = req.params;
 
             logger.info(`Tradier get order: ${orderId} for user: ${userId}`);
 
-            const order = await TradingService.getOrder(userId, orderId);
+            const order = await TradingService.getOrder(userId as string, orderId as string);
 
             return ApiResponseUtil.success(
                 res,
@@ -383,8 +383,8 @@ export class TradingController {
      */
     static async modifyOrder(req: AuthRequest, res: Response, next: NextFunction) {
         try {
-            const userId              = req.user?.id!;
-            const { orderId }         = req.params;
+            const userId = req.user?.id!;
+            const { orderId } = req.params;
 
             // Destructure all fields from body
             const {
@@ -397,8 +397,8 @@ export class TradingController {
             logger.info(`Tradier modify order: ${orderId} for user: ${userId}`);
 
             const result = await TradingService.modifyOrder(
-                userId,
-                orderId,
+                userId as string,
+                orderId as string,
                 type,
                 duration,
                 price,
@@ -422,12 +422,12 @@ export class TradingController {
      */
     static async cancelOrder(req: AuthRequest, res: Response, next: NextFunction) {
         try {
-            const userId      = req.user?.id!;
+            const userId = req.user?.id!;
             const { orderId } = req.params;
 
             logger.info(`Tradier cancel order: ${orderId} for user: ${userId}`);
 
-            const result = await TradingService.cancelOrder(userId, orderId);
+            const result = await TradingService.cancelOrder(userId as string, orderId as string);
 
             return ApiResponseUtil.success(
                 res,

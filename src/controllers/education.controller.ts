@@ -54,7 +54,7 @@ export class EducationController {
 
             logger.info(`Get modules request for level: ${slug}, user: ${userId}`);
 
-            const modules = await EducationService.getModules(userId, slug);
+            const modules = await EducationService.getModules(userId, slug as string);
 
             return ApiResponseUtil.success(
                 res,
@@ -82,7 +82,7 @@ export class EducationController {
 
             logger.info(`Get lessons request for module: ${slug}, user: ${userId}`);
 
-            const lessons = await EducationService.getLessons(userId, slug);
+            const lessons = await EducationService.getLessons(userId, slug as string);
 
             return ApiResponseUtil.success(
                 res,
@@ -108,7 +108,7 @@ export class EducationController {
 
             logger.info(`Get lesson request: ${slug}, user: ${userId}, lang: ${language}`);
 
-            const lesson = await EducationService.getLesson(userId, slug, language);
+            const lesson = await EducationService.getLesson(userId, slug as string, language);
 
             return ApiResponseUtil.success(
                 res,
@@ -132,7 +132,7 @@ export class EducationController {
 
             logger.info(`Complete lesson request: ${slug}, user: ${userId}`);
 
-            const result = await EducationService.completeLesson(userId, slug);
+            const result = await EducationService.completeLesson(userId, slug as string);
 
             return ApiResponseUtil.success(
                 res,
@@ -160,7 +160,7 @@ export class EducationController {
 
             logger.info(`Get module quiz request for: ${slug}, user: ${userId}`);
 
-            const quiz = await EducationService.getModuleQuiz(userId, slug);
+            const quiz = await EducationService.getModuleQuiz(userId, slug as string);
 
             return ApiResponseUtil.success(
                 res,
@@ -185,7 +185,7 @@ export class EducationController {
 
             logger.info(`Submit module quiz request for: ${slug}, user: ${userId}`);
 
-            const result = await EducationService.submitModuleQuiz(userId, slug, answers);
+            const result = await EducationService.submitModuleQuiz(userId, slug as string, answers);
 
             return ApiResponseUtil.success(
                 res,
@@ -213,7 +213,7 @@ export class EducationController {
 
             logger.info(`Get level quiz request for: ${slug}, user: ${userId}`);
 
-            const quiz = await EducationService.getLevelQuiz(userId, slug);
+            const quiz = await EducationService.getLevelQuiz(userId, slug as string);
 
             return ApiResponseUtil.success(
                 res,
@@ -238,7 +238,7 @@ export class EducationController {
 
             logger.info(`Submit level quiz request for: ${slug}, user: ${userId}`);
 
-            const result = await EducationService.submitLevelQuiz(userId, slug, answers);
+            const result = await EducationService.submitLevelQuiz(userId, slug as string, answers);
 
             return ApiResponseUtil.success(
                 res,

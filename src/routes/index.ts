@@ -11,6 +11,7 @@ import marketsAvRoutes from './markets-av.routes';
 import finnhubRoutes from './finnhub.routes';
 import tradingRoutes from './trading.routes';
 import educationRoutes from './education.routes';
+import finleyRoutes from './finley.routes';
 
 const router = Router();
 
@@ -40,6 +41,7 @@ router.use('/markets/finnhub', finnhubRoutes);
 router.use('/news', newsRoutes);
 router.use('/trading', tradingRoutes);
 router.use('/education', educationRoutes);
+router.use('/finley', finleyRoutes);
 // router.use('/webhooks', webhookRoutes);
 
 export default router;

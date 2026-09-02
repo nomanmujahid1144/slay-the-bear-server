@@ -11,6 +11,7 @@ import {
   resendOTPSchema,
   // refreshTokenSchema,
 } from '../validators/auth.validator';
+import { authenticate } from '../middlewares/auth.middleware';
 
 const router = Router();
 
@@ -76,5 +77,12 @@ router.post('/refresh-token', AuthController.refreshToken);
  * @access  Public
  */
 router.post('/logout', AuthController.logout);
+
+/**
+ * @route   POST /api/auth/logout-all
+ * @desc    Logout all user
+ * @access  Public
+ */
+router.post('/logout-all', authenticate, AuthController.logoutAll);
 
 export default router;
