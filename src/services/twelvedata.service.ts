@@ -324,6 +324,7 @@ class TwelveDataService {
         }
 
         // 3. Whatever's genuinely left needs a fresh call — ONE /batch request.
+        let lastBatchError: any = null;
         const needsFetch = normSymbols.filter((s) => !results.has(s));
         if (needsFetch.length > 0) {
             const requestMap: Record<string, string> = {};
@@ -365,13 +366,17 @@ class TwelveDataService {
                     await setCacheTD(CACHE_KEYS_TD.QUOTE(symbol), quote, CACHE_TTL_TD.QUOTE_SNAPSHOT);
                 }
             } catch (error: any) {
-                logger.error('Twelve Data getBatchQuotes /batch call failed:', error.message);
+                lastBatchError = error;
+                logger.error('Twelve Data getBatchQuotes /batch call failed:', error.response?.data ?? error.message);
                 // Don't throw yet — live/snapshot results (if any) are still valid to return.
             }
         }
 
         if (results.size === 0) {
-            throw ApiError.internal('Failed to fetch any quotes from Twelve Data');
+            const upstreamDetail = lastBatchError
+                ? JSON.stringify(lastBatchError.response?.data ?? lastBatchError.message ?? 'unknown error')
+                : 'no upstream call was made (all symbols resolved from cache with empty results)';
+            throw ApiError.internal(`Failed to fetch any quotes from Twelve Data — upstream: ${upstreamDetail}`);
         }
 
         logger.info(`✅ Twelve Data batch quotes: ${results.size}/${normSymbols.length} symbol(s) resolved`);
