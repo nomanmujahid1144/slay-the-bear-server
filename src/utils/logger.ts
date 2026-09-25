@@ -34,7 +34,7 @@ class Logger {
     };
 
     // Log to console in development
-    if (config.NODE_ENV === 'development' || level === 'ERROR' || level === 'WARN') {
+    if (config.NODE_ENV === 'development' || level === 'INFO' || level === 'ERROR' || level === 'WARN') {
       const emoji = {
         INFO: '📝',
         WARN: '⚠️',
