@@ -167,9 +167,15 @@ class TwelveDataService {
     // POST /batch — { "<id>": "/quote?symbol=AAPL&apikey=...", ... } in,
     // { code, status, data: { "<id>": <quote or error> } } out. One network
     // round trip for N symbols instead of N parallel /quote calls.
-    private async fetchBatch(requests: Record<string, string>): Promise<TwelveDataRawBatchResponse> {
+private async fetchBatch(requests: Record<string, string>): Promise<TwelveDataRawBatchResponse> {
         try {
-            const response = await this.client.post<TwelveDataRawBatchResponse>('/batch', requests);
+            const response = await this.client.post<TwelveDataRawBatchResponse>('/batch', requests, {
+                params: {}, // override this.client's default `?apikey=...` — must be empty for /batch
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `apikey ${config.TWELVE_DATA_API_KEY}`,
+                },
+            });
             return response.data;
         } catch (error: any) {
             logger.error('Twelve Data fetchBatch error:', error.response?.data ?? error.message);
