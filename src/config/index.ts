@@ -71,6 +71,10 @@ interface Config {
     UPSTASH_REDIS_REST_TOKEN: string;
     AUTH_REDIS_URL: string;
 
+    // Redis (Upstash) for Real time Market Data from Twelvedata
+    MARKET_DATA_REDIS_URL: string,
+    TWELVE_DATA_API_KEY: string,
+
     // Frontend
     FRONTEND_URL: string;
 
@@ -145,6 +149,10 @@ const config: Config = {
     UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL || '',
     UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN || '',
     AUTH_REDIS_URL: process.env.AUTH_REDIS_URL || '',
+
+    // Redis (Upstash) for Real time Market Data from Twelvedata
+    TWELVE_DATA_API_KEY: process.env.TWELVE_DATA_API_KEY || '',
+    MARKET_DATA_REDIS_URL: process.env.MARKET_DATA_REDIS_URL || '',
 
     // Frontend
     FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:3000',

@@ -6,6 +6,7 @@ import config from './config';
 import { connectDatabase } from './db';
 import { logger } from './utils/logger';
 import { websocketService } from './services/websocket.service';
+import { twelveDataWebSocketService } from './services/twelvedata-ws.service';
 
 /**
  * Start Server
@@ -21,6 +22,9 @@ async function startServer() {
     // Initialize WebSocket server
     websocketService.initialize(server);
 
+    // Initialize Twelve Data WebSocket server (separate engine, separate path)
+    twelveDataWebSocketService.initialize(server);
+
     // Start server
     server.listen(config.PORT, () => {
       logger.info(`🚀 Server started successfully!`);
@@ -29,6 +33,7 @@ async function startServer() {
       logger.info(`🐻 Slay The Bear API is running`);
       logger.info(`📝 API Docs: http://localhost:${config.PORT}/api/health`);
       logger.info(`🔌 WebSocket: ws://localhost:${config.PORT}/ws/markets`);
+      logger.info(`🔌 Twelve Data WebSocket: ws://localhost:${config.PORT}/ws/markets/twelvedata`);
     });
 
     server.timeout = 300000; // 5 min timeout for long portfolio requests
@@ -55,12 +60,14 @@ process.on('uncaughtException', (error: Error) => {
 process.on('SIGTERM', () => {
   logger.info('SIGTERM received, shutting down gracefully...');
   websocketService.close();
+  twelveDataWebSocketService.close();
   process.exit(0);
 });
 
 process.on('SIGINT', () => {
   logger.info('SIGINT received, shutting down gracefully...');
   websocketService.close();
+  twelveDataWebSocketService.close();
   process.exit(0);
 });
 

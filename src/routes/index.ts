@@ -12,6 +12,7 @@ import finnhubRoutes from './finnhub.routes';
 import tradingRoutes from './trading.routes';
 import educationRoutes from './education.routes';
 import finleyRoutes from './finley.routes';
+import twelveDataRoutes from './twelvedata.routes';
 
 const router = Router();
 
@@ -37,6 +38,7 @@ router.use('/legal', legalRoutes);
 router.use('/iap', iap);
 router.use('/markets', marketsRoutes);
 router.use('/markets', marketsAvRoutes);
+router.use('/markets/twelvedata', twelveDataRoutes);
 router.use('/markets/finnhub', finnhubRoutes);
 router.use('/news', newsRoutes);
 router.use('/trading', tradingRoutes);
