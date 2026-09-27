@@ -29,6 +29,7 @@ import {
     TwelveDataSymbolSearchResult,
     TwelveDataHistory,
     TwelveDataMarket,
+    TwelveDataRawBatchSuccessItem,
 } from '../types/markets/twelvedata/twelvedata-response.types';
 import { ApiError } from '../utils/ApiError';
 
@@ -167,7 +168,7 @@ class TwelveDataService {
     // POST /batch — { "<id>": "/quote?symbol=AAPL&apikey=...", ... } in,
     // { code, status, data: { "<id>": <quote or error> } } out. One network
     // round trip for N symbols instead of N parallel /quote calls.
-private async fetchBatch(requests: Record<string, string>): Promise<TwelveDataRawBatchResponse> {
+    private async fetchBatch(requests: Record<string, { url: string }>): Promise<TwelveDataRawBatchResponse> {
         try {
             const response = await this.client.post<TwelveDataRawBatchResponse>('/batch', requests, {
                 params: {}, // override this.client's default `?apikey=...` — must be empty for /batch
@@ -329,28 +330,29 @@ private async fetchBatch(requests: Record<string, string>): Promise<TwelveDataRa
             }
         }
 
+        let incompleteCount = 0;
         // 3. Whatever's genuinely left needs a fresh call — ONE /batch request.
         let lastBatchError: any = null;
         const needsFetch = normSymbols.filter((s) => !results.has(s));
         if (needsFetch.length > 0) {
-            const requestMap: Record<string, string> = {};
+            const requestMap: Record<string, { url: string }> = {};
             const idToSymbol = new Map<string, string>();
             needsFetch.forEach((symbol, i) => {
                 const id = `q${i}`;
-                // requestMap[id] = `/quote?symbol=${encodeURIComponent(symbol)}&apikey=${config.TWELVE_DATA_API_KEY}`;
-                requestMap[id] = `/quote?symbol=${symbol}`;
+                requestMap[id] = { url: `/quote?symbol=${symbol}` };
                 idToSymbol.set(id, symbol);
             });
 
             try {
                 const batchResponse = await this.fetchBatch(requestMap);
+                logger.info(`Twelve Data raw /batch response: ${JSON.stringify(batchResponse)}`);
 
                 const logoLookups = await Promise.all(
                     needsFetch.map(async (symbol) => [symbol, await this.getLogo(symbol)] as const),
                 );
                 const logosBySymbol = new Map(logoLookups);
 
-                const batchData: Record<string, TwelveDataRawQuote | TwelveDataRawBatchError> = batchResponse.data ?? {};
+                const batchData: Record<string, TwelveDataRawBatchSuccessItem | TwelveDataRawBatchError> = batchResponse.data ?? {};
                 for (const [requestId, item] of Object.entries(batchData)) {
                     const symbol = idToSymbol.get(requestId);
                     if (!symbol) continue;
@@ -360,8 +362,17 @@ private async fetchBatch(requests: Record<string, string>): Promise<TwelveDataRa
                         continue;
                     }
 
+                    // Real data is nested under `.response` — the item itself
+                    // is just { status: "success", response: {...} }.
+                    const rawQuote = item.response;
+                    if (!rawQuote?.symbol || rawQuote.close == null || Number.isNaN(parseFloat(rawQuote.close))) {
+                        logger.warn(`⚠️ Twelve Data batch: incomplete data for ${symbol} — raw item: ${JSON.stringify(item)}`);
+                        incompleteCount++;
+                        continue;
+                    }
+
                     const logo = logosBySymbol.get(symbol);
-                    const quote = this.normaliseQuote(item, {
+                    const quote = this.normaliseQuote(rawQuote, {
                         source: 'rest',
                         market: getDefaultMarketForSymbol(symbol),
                         logoUrl: logo?.logoUrl ?? null,
@@ -379,9 +390,14 @@ private async fetchBatch(requests: Record<string, string>): Promise<TwelveDataRa
         }
 
         if (results.size === 0) {
-            const upstreamDetail = lastBatchError
-                ? JSON.stringify(lastBatchError.response?.data ?? lastBatchError.message ?? 'unknown error')
-                : 'no upstream call was made (all symbols resolved from cache with empty results)';
+            let upstreamDetail: string;
+            if (lastBatchError) {
+                upstreamDetail = JSON.stringify(lastBatchError.response?.data ?? lastBatchError.message ?? 'unknown error');
+            } else if (incompleteCount > 0) {
+                upstreamDetail = `batch call succeeded, but all ${incompleteCount} requested symbol(s) came back with empty data from Twelve Data`;
+            } else {
+                upstreamDetail = 'no upstream call was made (all symbols resolved from cache with empty results)';
+            }
             throw ApiError.internal(`Failed to fetch any quotes from Twelve Data — upstream: ${upstreamDetail}`);
         }
 

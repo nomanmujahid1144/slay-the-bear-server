@@ -96,17 +96,22 @@ export interface TwelveDataRawBatchError {
     status: 'error';
 }
 
+export interface TwelveDataRawBatchSuccessItem {
+    status: 'success';
+    response: TwelveDataRawQuote;
+}
+
 export interface TwelveDataRawBatchResponse {
     code?: number;
     status?: string;
     data: {
-        [requestId: string]: TwelveDataRawQuote | TwelveDataRawBatchError;
+        [requestId: string]: TwelveDataRawBatchSuccessItem | TwelveDataRawBatchError;
     };
 }
 
 // Type guard — an error item always has this shape; a real quote never does.
 export function isTwelveDataBatchError(
-    item: TwelveDataRawQuote | TwelveDataRawBatchError,
+    item: TwelveDataRawBatchSuccessItem | TwelveDataRawBatchError,
 ): item is TwelveDataRawBatchError {
     return (item as TwelveDataRawBatchError).status === 'error';
 }

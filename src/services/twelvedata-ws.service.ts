@@ -51,6 +51,7 @@ export class TwelveDataWebSocketService {
     private allSubscribedSymbols: Set<string> = new Set(); // everything currently live on the upstream socket (defaults + extras)
     private clientRequestedSymbols: Set<string> = new Set(); // Layer 2 demand only, recomputed from connected clients
     private symbolSnapshots: Map<string, TwelveDataQuote> = new Map(); // last known full quote per symbol, updated per tick
+    private seedingInProgress: Set<string> = new Set(); // symbols currently mid-REST-fetch — prevents duplicate seed calls if Twelve Data's subscribe-status confirmation arrives in more than one message
 
     private heartbeatTimer: NodeJS.Timeout | null = null;
     private reconnectTimer: NodeJS.Timeout | null = null;
@@ -245,11 +246,15 @@ export class TwelveDataWebSocketService {
      * caches both the quote snapshot and the logo.
      */
     private async seedSnapshot(symbol: string) {
+        if (this.seedingInProgress.has(symbol)) return; // already fetching this one — don't double up
+        this.seedingInProgress.add(symbol);
         try {
             const { data } = await twelveDataService.getQuote(symbol);
             this.symbolSnapshots.set(symbol, data);
         } catch (error: any) {
             logger.warn(`Twelve Data WS: could not seed baseline for ${symbol}: ${error.message}`);
+        } finally {
+            this.seedingInProgress.delete(symbol);
         }
     }
 
